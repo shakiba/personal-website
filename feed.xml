@@ -1,31 +1,1258 @@
----
-layout: null
-nav_exclude: true
----
 <?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
-    <title>{{ site.title | xml_escape }}</title>
-    <description>{{ site.description | xml_escape }}</description>
-    <link>{{ site.url }}{{ site.baseurl }}/</link>
-    <atom:link href="{{ "/feed.xml" | prepend: site.baseurl | prepend: site.url }}" rel="self" type="application/rss+xml"/>
-    <pubDate>{{ site.time | date_to_rfc822 }}</pubDate>
-    <lastBuildDate>{{ site.time | date_to_rfc822 }}</lastBuildDate>
-    <generator>Jekyll v{{ jekyll.version }}</generator>
-    {% for post in site.posts limit:10 %}
+    <title>john-hearn.info</title>
+    <description>Personal site for blogging and about science, software and such</description>
+    <link>/</link>
+    <atom:link href="/feed.xml" rel="self" type="application/rss+xml"/>
+    <pubDate>Fri, 26 Jul 2019 13:51:34 +0200</pubDate>
+    <lastBuildDate>Fri, 26 Jul 2019 13:51:34 +0200</lastBuildDate>
+    <generator>Jekyll v3.8.5</generator>
+    
       <item>
-        <title>{{ post.title | xml_escape }}</title>
-        <description>{{ post.content | xml_escape }}</description>
-        <pubDate>{{ post.date | date_to_rfc822 }}</pubDate>
-        <link>{{ post.url | prepend: site.baseurl | prepend: site.url }}</link>
-        <guid isPermaLink="true">{{ post.url | prepend: site.baseurl | prepend: site.url }}</guid>
-        {% for tag in post.tags %}
-        <category>{{ tag | xml_escape }}</category>
-        {% endfor %}
-        {% for cat in post.categories %}
-        <category>{{ cat | xml_escape }}</category>
-        {% endfor %}
+        <title>Building a QPU simulator in Julia - Part 7</title>
+        <description>&lt;p&gt;Unlike Deutsch’s algorithm, which merely shows the possibility of quantum speed-up but isn’t of any practical use, &lt;a href=&quot;https://quantum-algorithms.herokuapp.com/299/paper/node1.html&quot;&gt;Shor’s algorithm&lt;/a&gt; has considerable practical applications. Indeed it excites many people because it could potentially be used to break much of the secure online communications which are used today.&lt;/p&gt;
+
+&lt;p&gt;Using tools from number theory, the algorithm consists of a procedure which transforms the problem of prime factorings into a problem of period finding. The advantage of this is that the period finding part, which is exponentially hard on classical computers, can be implemented efficiently (i.e. in polynomial time) with a quantum computer.&lt;/p&gt;
+
+&lt;p&gt;The details of the algorithm can be found across the internet. Here’s a &lt;a href=&quot;https://www.youtube.com/watch?v=8EcLYB6VD4s&quot;&gt;video of a talk&lt;/a&gt; by colleague James Birnie but I recommend you look for your own research material. There’s some non-trivial maths going on and it’s not easy to understand all of the different elements involved in the algorithm. It helps to read multiple different tutorials and explanations.&lt;/p&gt;
+
+&lt;p&gt;Anyway, for the moment, let’s just implement the classical parts in Julia. It turns out to be quite simple. These are the steps:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Step 1: choose a random number 1 &amp;lt; a &amp;lt; N&lt;/li&gt;
+  &lt;li&gt;Step 2: find r, the period of $a^x (mod N)$ with respect to x&lt;/li&gt;
+  &lt;li&gt;Step 3: check that r is even and $a^{r/2}+1 \neq 0 (mod N)$&lt;/li&gt;
+  &lt;li&gt;Step 4: calculate the factors (p,q) as
+  $p = gcd(a^{r/2}-1, N)$
+  $q = gcd(a^{r/2}+1, N)$&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;Obviously before we can do anything we need a number to factor. Let’s use 37 * 41 = 1517.&lt;/p&gt;
+
+&lt;div class=&quot;language-julia highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# Number to factor, a multiple of two prime factors &amp;gt; 2&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;N&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1517&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;The first step is to choose a random number $a &amp;lt; N$. Also we don’t want to use the degenerate case of $1$.&lt;/p&gt;
+
+&lt;div class=&quot;language-julia highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;a&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;kt&quot;&gt;BigInt&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;rand&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;N&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;))&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;We use Julia’s arbitrary precision integers (&lt;code class=&quot;highlighter-rouge&quot;&gt;BigInt&lt;/code&gt;s) because the exponents get very big very quickly and even 64 bit integers will likely overflow.&lt;/p&gt;
+
+&lt;p&gt;The next step is to find the period, say $r$, of $a^x mod N$ with respect to $x$. This is the operation that will be done with a quantum computation. For now we’ll do it with a brute force approach but remember that this would be prohibitively time-consuming when the number to factor is large.&lt;/p&gt;
+
+&lt;div class=&quot;language-julia highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;r&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;while&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;a&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;^&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;r&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;%&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;N&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;!=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;r&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;N&lt;/span&gt;
+    &lt;span class=&quot;kd&quot;&gt;global&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;r&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;r&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;r&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;end&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;After running the above code let’s look at the results:&lt;/p&gt;
+
+&lt;div class=&quot;language-julia highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt; &lt;span class=&quot;nd&quot;&gt;@show&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;N&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;a&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;r&lt;/span&gt;
+&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;N&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;a&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;r&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1517&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1371&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;180&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;So we have our period, 180. Lucky we used arbitrary precision integers, $1371^{180}$ is a very, very big number!&lt;/p&gt;
+
+&lt;p&gt;Next, for the calculation to work we need to check that the period is even and that: $a^{r/2}+1 \neq 0 (mod N)$. If it isn’t then we just try again with another value for $a$.&lt;/p&gt;
+
+&lt;div class=&quot;language-julia highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;r&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;%&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;a&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;^&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;r&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;gt;&amp;gt;&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;%&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;N&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;!=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;
+   &lt;span class=&quot;o&quot;&gt;...&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;end&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Finally we calculate the factors, $p$ and $q$. Julia gives us an implementation of the greatest common divisor algorithm as part of its base functions, so no need to worry about that. The factors are $p=gcd(a^{r/2}-1, N)$ and $q=gcd(a^{r/2}+1, N)$. To keep the types as integers we can use the bit shift operator rather then dividing by 2. In Julia this is simply:&lt;/p&gt;
+
+&lt;div class=&quot;language-julia highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;    &lt;span class=&quot;n&quot;&gt;p&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;gcd&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;a&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;^&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;r&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;gt;&amp;gt;&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;N&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;q&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;gcd&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;a&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;^&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;r&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;gt;&amp;gt;&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;+&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;N&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;So what’s the result?&lt;/p&gt;
+
+&lt;div class=&quot;language-julia highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt; &lt;span class=&quot;nd&quot;&gt;@show&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;p&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;q&lt;/span&gt;
+&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;p&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;q&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;41&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;37&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Which are the numbers we first thought of!&lt;/p&gt;
+
+&lt;p&gt;Right, that’s the easy part and with Julia it was very straightforward due to the native arbitrary precision integers and exponent operators. The hard part is the actual quantum algorithm which we’ll come back to in a later post.&lt;/p&gt;
+
+&lt;p&gt;So here’s the classical algorithm ion it’s entirety. There are some edge case that are not being checked but this is basically it.&lt;/p&gt;
+
+&lt;div class=&quot;language-julia highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# Number to factor, a multiple of two prime factors &amp;gt; 2&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;N&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1517&lt;/span&gt;
+
+&lt;span class=&quot;c&quot;&gt;# Step 1: choose a random number 1 &amp;lt; a &amp;lt; N&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;a&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;kt&quot;&gt;BigInt&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;rand&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;N&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;))&lt;/span&gt;
+
+&lt;span class=&quot;c&quot;&gt;# Step 2: find r, the period of a^x mod N&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;r&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;
+
+&lt;span class=&quot;k&quot;&gt;while&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;a&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;^&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;r&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;%&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;N&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;!=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;r&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;N&lt;/span&gt;
+    &lt;span class=&quot;kd&quot;&gt;global&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;r&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;r&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;r&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;end&lt;/span&gt;
+
+&lt;span class=&quot;nd&quot;&gt;@show&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;N&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;a&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;r&lt;/span&gt;
+
+&lt;span class=&quot;c&quot;&gt;# Step 3: check that r is even and a^(r/2)+1 != 0 mod N&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;r&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;%&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;a&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;^&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;r&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;gt;&amp;gt;&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;%&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;N&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;!=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;
+
+    &lt;span class=&quot;c&quot;&gt;# Step 4: calculate the factors&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;p&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;gcd&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;a&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;^&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;r&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;gt;&amp;gt;&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;N&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;q&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;gcd&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;a&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;^&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;r&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;gt;&amp;gt;&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;+&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;N&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt;
+
+    &lt;span class=&quot;nd&quot;&gt;@show&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;p&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;q&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;end&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+</description>
+        <pubDate>Fri, 26 Jul 2019 11:50:00 +0200</pubDate>
+        <link>/articles/building-a-qpu-simulator-in-julia-part-7</link>
+        <guid isPermaLink="true">/articles/building-a-qpu-simulator-in-julia-part-7</guid>
+        
+        <category>quantum computing</category>
+        
+        <category>julia</category>
+        
+        
       </item>
-    {% endfor %}
+    
+      <item>
+        <title>Building a QPU simulator in Julia - Part 6</title>
+        <description>&lt;p&gt;The &lt;a href=&quot;https://en.wikipedia.org/wiki/Quantum_Fourier_transform&quot;&gt;Quantum Fourier Transform&lt;/a&gt; (QFT) is an important quantum operation and an essential part of the period finding step needed for &lt;a href=&quot;https://quantum-algorithms.herokuapp.com/299/paper/node1.html&quot;&gt;Shor’s algorithm&lt;/a&gt;. It can be built as a quantum circuit but it’s very easy to build its unitary matrix directly, the details are in the Wikipedia article. In Julia, this was even easier than I expected. Once we have calculated a couple of constants, we can use a 2-d &lt;code class=&quot;highlighter-rouge&quot;&gt;for&lt;/code&gt; comprehension to create the individual elements of the array in a single line.&lt;/p&gt;
+
+&lt;div class=&quot;language-julia highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;k&quot;&gt;function&lt;/span&gt;&lt;span class=&quot;nf&quot;&gt; qft&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt;
+   &lt;span class=&quot;n&quot;&gt;N&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;^&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n&lt;/span&gt;
+   &lt;span class=&quot;n&quot;&gt;ω&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;exp&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;π&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;im&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;/&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;N&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt;
+   &lt;span class=&quot;n&quot;&gt;a&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;/&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;sqrt&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;N&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt;
+   &lt;span class=&quot;x&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;a&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;ω&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;^&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;j&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;i&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;N&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;j&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;N&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;]&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;end&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Here $n$ is the number of bits and $N$ the size of the matrix, which as we know grows exponentially with the number of bits. $ω$ is the first complex $N^{th}$ root of unity and $a$ the normalising factor. The comprehension runs over both axis $i$ and $j$ computing the element at each position.&lt;/p&gt;
+
+&lt;p&gt;We can test this against the example from the Wikipedia article:&lt;/p&gt;
+
+&lt;div class=&quot;language-julia highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nd&quot;&gt;@test&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;qft&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;≈&lt;/span&gt; &lt;span class=&quot;mf&quot;&gt;0.5&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;;&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;im&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;im&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;;&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;;&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;im&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;im&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;]&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;In the above it’s going to generate complex numbers with Float64 precision. For our quantum gates this level of precision is not necessary and uses more memory. A few tweaks to the function will use Float32 instead.&lt;/p&gt;
+
+&lt;div class=&quot;language-julia highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;k&quot;&gt;function&lt;/span&gt;&lt;span class=&quot;nf&quot;&gt; qft&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt;
+   &lt;span class=&quot;n&quot;&gt;N&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;^&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n&lt;/span&gt;
+   &lt;span class=&quot;n&quot;&gt;ω&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;exp&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mf&quot;&gt;2f0&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;π&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;im&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;/&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;N&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt;
+   &lt;span class=&quot;n&quot;&gt;a&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mf&quot;&gt;1f0&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;/&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;sqrt&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;Float32&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;N&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;))&lt;/span&gt;
+   &lt;span class=&quot;x&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;a&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;ω&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;^&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;j&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;i&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;N&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;j&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;N&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;]&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;end&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;And test that it does indeed generate the correct type.&lt;/p&gt;
+
+&lt;div class=&quot;language-julia highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nd&quot;&gt;@test&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;typeof&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;qft&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;))&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;kt&quot;&gt;Array&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;Complex&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;Float32&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;},&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;What about the performance? Let’s generate the QFT for different numbers of bits.&lt;/p&gt;
+
+&lt;div class=&quot;language-console highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;gp&quot;&gt;&amp;gt;&lt;/span&gt; @time qft&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;11&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;0.384501 seconds (6 allocations: 32.000 MiB, 11.74% gc time)
+2048×2048 Array{Complex{Float32},2}
+
+&lt;/span&gt;&lt;span class=&quot;gp&quot;&gt;&amp;gt;&lt;/span&gt; @time qft&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;12&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;1.469458 seconds (6 allocations: 128.000 MiB, 3.34% gc time)
+4096×4096 Array{Complex{Float32},2}
+
+&lt;/span&gt;&lt;span class=&quot;gp&quot;&gt;&amp;gt;&lt;/span&gt; @time qft&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;13&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;6.037579 seconds (6 allocations: 512.000 MiB, 0.74% gc time)
+8192×8192 Array{Complex{Float32},2}
+
+&lt;/span&gt;&lt;span class=&quot;gp&quot;&gt;&amp;gt;&lt;/span&gt; @time qft&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;14&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;25.163830 seconds (6 allocations: 2.000 GiB, 0.20% gc time)
+16384×16384 Array{Complex{Float32},2}
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;The exponential increase in time and space is evident and we quickly reach practical limits. The array is dense because the values are always non-zero but since the calculation time is relatively small there could be considerable advantage using a &lt;a href=&quot;https://github.com/traktofon/ComputedArrays.jl&quot;&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;ComputedArray&lt;/code&gt;&lt;/a&gt; instead of a normal array in this case.&lt;/p&gt;
+</description>
+        <pubDate>Thu, 25 Jul 2019 20:50:00 +0200</pubDate>
+        <link>/articles/building-a-qpu-simulator-in-julia-part-6</link>
+        <guid isPermaLink="true">/articles/building-a-qpu-simulator-in-julia-part-6</guid>
+        
+        <category>quantum computing</category>
+        
+        <category>julia</category>
+        
+        
+      </item>
+    
+      <item>
+        <title>DIKUW for Programmers</title>
+        <description>&lt;p&gt;One of the most interesting models that I’ve seen in recent months is from a talk on &lt;a href=&quot;https://youtu.be/EbLh7rZ3rhU&quot;&gt;Systems Thinking&lt;/a&gt; by &lt;a href=&quot;https://en.wikipedia.org/wiki/Russell_L._Ackoff&quot;&gt;Dr. Russell Ackoff&lt;/a&gt;. It’s variously called the &lt;a href=&quot;https://en.wikipedia.org/wiki/DIKW_pyramid&quot;&gt;DIKW Pyramid&lt;/a&gt; (a mneumonic for &lt;strong&gt;D&lt;/strong&gt;ata, &lt;strong&gt;I&lt;/strong&gt;nformation, &lt;strong&gt;K&lt;/strong&gt;nowledge, &lt;strong&gt;W&lt;/strong&gt;isdom) or the Information Chain, amongst many other names. Dr. Ackoff also includes a category called “&lt;strong&gt;U&lt;/strong&gt;nderstanding” which is avoided under some philosophical treatments but I’ll include it because I think it provides valuable insight. Hence and henceforth I’ll call it the &lt;strong&gt;DIKUW&lt;/strong&gt; model.&lt;/p&gt;
+
+&lt;p&gt;It’s one of those models which is hard to describe but easy to grasp. In a nutshell it’s this:&lt;/p&gt;
+
+&lt;p&gt;Data⇒Information⇒Knowledge⇒Understanding⇒Wisdom&lt;/p&gt;
+
+&lt;p&gt;How each of these layers is interpreted varies. I’m going to try and approach it from three angles: as a programmer with programming constructs, with de Bono’s Mechanics of Mind model and, finally, from an AI perspective.&lt;/p&gt;
+
+&lt;p&gt;This first post treats it as a programmer.&lt;/p&gt;
+
+&lt;h2 id=&quot;data&quot;&gt;Data&lt;/h2&gt;
+&lt;p&gt;Imagine a random area of a memory chip full of transistors, each either on or off. One might suppose that those states mean something to someone but without any context it remains data and, actually,  &lt;strong&gt;does not provide information at all&lt;/strong&gt;.&lt;/p&gt;
+
+&lt;p&gt;That may seem counter intuitive because we are used to seeing data as information but, thinking about it, it can’t be. First, we don’t even know if it is a complete representation of anything. It’s just a state with no context. It might as well, in fact, be random&lt;label for=&quot;extraction&quot; class=&quot;margin-toggle sidenote-number&quot;&gt;&lt;/label&gt;&lt;input type=&quot;checkbox&quot; id=&quot;extraction&quot; class=&quot;margin-toggle&quot; /&gt;&lt;span class=&quot;sidenote&quot;&gt;We may be able to apply techniques from the higher levels to extract more data from the data: average, variance, repeating patterns, etc. but until we apply the higher levels the data remains data. &lt;/span&gt;.&lt;/p&gt;
+
+&lt;p&gt;Often, as programmers we confuse data with information and pay the price with bugs and errors, as we’ll see in a moment.&lt;/p&gt;
+
+&lt;h2 id=&quot;information&quot;&gt;Information&lt;/h2&gt;
+&lt;p&gt;Let’s say we have observed the state of our transistors somehow and we know which states represent either 0s or 1s, and we know it’s an 8-bit representation. Then our random piece of RAM might look like this:&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;01101100 01101001 01100110 01100101 11100010 10000110 10010000 01111011 
+11100010 10000110 10010001 00110001 00100000 11100010 10001101 10110101 
+11100010 10001000 10101000 00101110 11100010 10001000 10100111 00110011 
+00100000 00110100 00111101 00101011 00101111 00101100 11000010 10101111 
+00110001 00100000 00110000 00100000 00110001 11100010 10001000 10011000 
+00101110 11100010 10001010 10010110 11000010 10101111 00110001 00100000 
+00110000 00100000 00110001 11100010 10001000 10011000 00101110 11100010 
+10001100 10111101 11100010 10001010 10000010 11100010 10001101 10110101 
+01111101 00001101 00001010
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;So we have some information. Hurray! Or do we? Actually no. We’re still missing context. Is it part of the Chemical Brothers’ new album or an amusing cat video?&lt;/p&gt;
+
+&lt;p&gt;Let’s say someone tells me it’s text. OK, great, no problem. &lt;em&gt;Looks online for binary text converter.&lt;/em&gt;  This means we really do have some information, right?&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;lifeâ{â1 âµâ¨.â§3 4=+/,Â¯1 0 1â.âÂ¯1 0 1â.â½ââµ}
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Ups, something is still wrong. Nobody told us the encoding. This is a common programming error and due to a confusion over data and information. Let’s try with UTF-8 instead of ASCII.&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;life←{↑1 ⍵∨.∧3 4=+/,¯1 0 1∘.⊖¯1 0 1∘.⌽⊂⍵}
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Well, the encoding is now correct and &lt;strong&gt;we now finally have some information&lt;/strong&gt; (yeah!). However, it’s still gobbledygook, at least to me. Even so, just to get this far we needed to know:&lt;/p&gt;
+&lt;ol&gt;
+  &lt;li&gt;&lt;em&gt;how&lt;/em&gt; to observe some state (transistors on or off, in this case)&lt;/li&gt;
+  &lt;li&gt;&lt;em&gt;how&lt;/em&gt; to read that state (0s or 1s)&lt;/li&gt;
+  &lt;li&gt;&lt;em&gt;what&lt;/em&gt; it represents (image, text, audio, etc.)&lt;/li&gt;
+  &lt;li&gt;&lt;em&gt;how&lt;/em&gt; it’s represented, the format (UTF-8, ASCII, etc.)&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;The good news is that information, like energy, can be manipulated and changed in form. We could convert it to base-7 or EBCIDIC, if we wanted, and it wouldn’t lose it’s content, &lt;strong&gt;as long as we remember the context&lt;/strong&gt;, the meta-data if you like, our information is safe. But what do we do with it?&lt;/p&gt;
+
+&lt;h2 id=&quot;knowledge&quot;&gt;Knowledge&lt;/h2&gt;
+
+&lt;p&gt;We still have a problem. &lt;strong&gt;We have no idea what the information means&lt;/strong&gt;. It looks like we have some symbols and someone probably knows what those symbols mean but I’m going to guess that most people don’t. This is beyond encoding and into the area of semiotics and language. The symbols are &lt;em&gt;signifiers&lt;/em&gt;.&lt;/p&gt;
+
+&lt;p&gt;Now, let me tell you, that is actually a piece APL code. If you know something about APL maybe you can follow what it’s doing. If not, then I can point you towards the &lt;a href=&quot;https://aplwiki.com/&quot;&gt;APL wiki&lt;/a&gt; or the &lt;a href=&quot;https://en.wikipedia.org/wiki/APL_(programming_language)&quot;&gt;Wikipedia&lt;/a&gt; entry and maybe after (considerable) study you might be able to follow what it’s doing. You could even &lt;a href=&quot;https://www.youtube.com/watch?v=a9xAKttWgP4&quot;&gt;watch the video&lt;/a&gt;. If you can then hat’s off to you sir! I personally have no idea.&lt;/p&gt;
+
+&lt;p&gt;As it is given, this is a recipe which solves a problem. But then we might ask ourselves: what problem?&lt;/p&gt;
+
+&lt;h2 id=&quot;understanding&quot;&gt;Understanding&lt;/h2&gt;
+
+&lt;p&gt;Even when we know what the program &lt;em&gt;does&lt;/em&gt; we might ask ourselves: why did someone write this code in the first place? What’s its purpose? There are no comments, the variables are greek (literally). The only clue is the name of the function….&lt;/p&gt;
+
+&lt;p&gt;In actual fact it is a &lt;a href=&quot;https://en.wikipedia.org/wiki/APL_(programming_language)#Game_of_Life&quot;&gt;famous one-liner&lt;/a&gt; for &lt;a href=&quot;https://en.wikipedia.org/wiki/Conway%27s_Game_of_Life&quot;&gt;Conway’s Game of Life&lt;/a&gt;. If you don’t know what the Game of Life is, it’s a famous programming toy from computer science which turns out to be in a class of systems which are Turing complete, that is universal computing machines. The person who wrote the code probably knew that.&lt;/p&gt;
+
+&lt;p&gt;They also knew intimately &lt;em&gt;how&lt;/em&gt; to solve the problem with the given language. That require a deeper level of reasoning than merely learning the language. It means many hours of experimentation and practice. That is why we do katas and continuous practice to hone these skills.&lt;/p&gt;
+
+&lt;p&gt;Understanding why and how is very different from following the rules.&lt;/p&gt;
+
+&lt;h2 id=&quot;wisdom&quot;&gt;Wisdom&lt;/h2&gt;
+
+&lt;p&gt;OK, so we understand universal computation and the game of life, the APL language, the text encodings, the bytes and the transistors. We might understand the concepts but how do we know when and if to apply them? When would I consider APL over some other language? When should I use a programming language at all or and when should I be playing with my children?&lt;/p&gt;
+
+&lt;p&gt;You might have noticed that the ideas become more abstract and general as we move along the chain. This last level is the most difficult of all and the subject of most debate. If understanding requires reflection then this require still more.&lt;/p&gt;
+
+&lt;p&gt;This has been just one trivial example of the many levels of knowledge or understanding behind anything we do. We are knowledge workers, using information everyday. I wonder sometimes if we really stop to really understand some of the things we do (he says, copy/pasting from Wikipedia) or whether we are content with &lt;em&gt;just&lt;/em&gt; knowledge.&lt;/p&gt;
+
+&lt;p&gt;(That’s the first part. The next part will deal with applying mental models to the different stages to understand them better in general.)&lt;/p&gt;
+
+</description>
+        <pubDate>Sun, 07 Jul 2019 20:30:00 +0200</pubDate>
+        <link>/articles/dikuw-for-programmers</link>
+        <guid isPermaLink="true">/articles/dikuw-for-programmers</guid>
+        
+        <category>semiotics</category>
+        
+        
+      </item>
+    
+      <item>
+        <title>Building a QPU simulator in Julia - Part 4</title>
+        <description>&lt;p&gt;Recall that &lt;a href=&quot;deutsch-jozsa-algorithm&quot;&gt;Deutsch’s algorithm&lt;/a&gt; can be represented by the following circuit:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/quantum-computing/deutschs-circuit.png&quot; alt=&quot;Deutsch's algorithm circuit&quot; width=&quot;320px&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;We want something like this, remembering that Julia is 1-index based:&lt;/p&gt;
+
+&lt;div class=&quot;language-julia highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;deutch&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Uf&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;register&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ZERO&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;ONE&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;|&amp;gt;&lt;/span&gt;
+                &lt;span class=&quot;n&quot;&gt;gate&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;H&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;H&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;|&amp;gt;&lt;/span&gt;
+                &lt;span class=&quot;n&quot;&gt;gate&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Uf&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;|&amp;gt;&lt;/span&gt;
+                &lt;span class=&quot;n&quot;&gt;gate&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;H&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;eye&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;|&amp;gt;&lt;/span&gt;
+                &lt;span class=&quot;n&quot;&gt;measure&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;We already have most of the machinery to make this work. We need an overloaded &lt;code class=&quot;highlighter-rouge&quot;&gt;register&lt;/code&gt; function to create a register with the given states. This is straightforward and very similar to the &lt;code class=&quot;highlighter-rouge&quot;&gt;gate&lt;/code&gt; function we defined in the last post.&lt;/p&gt;
+
+&lt;div class=&quot;language-julia highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;register&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;x&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;...&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;foldl&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;kron&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;x&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Next a &lt;em&gt;pipeable&lt;/em&gt; &lt;code class=&quot;highlighter-rouge&quot;&gt;measure&lt;/code&gt; function that takes the bit &lt;code class=&quot;highlighter-rouge&quot;&gt;k&lt;/code&gt; that we want to measure (1-indexed).&lt;/p&gt;
+
+&lt;div class=&quot;language-julia highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;measure&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;k&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;qubits&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;measure!&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;k&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;qubits&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;][&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;k&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;]&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;To avoid having to pass in the size of the register, we can calculate it from the length of the &lt;code class=&quot;highlighter-rouge&quot;&gt;qubits&lt;/code&gt; vector. We know that the length, $l$, of the vector is $l=2^{n}$ so $n=\lfloor log_{2}(l) \rfloor$. In code that becomes:&lt;/p&gt;
+
+&lt;div class=&quot;language-julia highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;size&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;qubits&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;kt&quot;&gt;Int&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;floor&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;log2&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;length&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;qubits&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;))))&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;measure&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;k&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;qubits&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;measure!&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;size&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;qubits&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;),&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;k&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;qubits&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;][&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;k&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;]&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;All that remains is to define the oracle &lt;script type=&quot;math/tex&quot;&gt;U_{f}&lt;/script&gt;. For 2-bit inputs there are four possible functions:&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th style=&quot;text-align: center&quot;&gt;$x$&lt;/th&gt;
+      &lt;th style=&quot;text-align: center&quot;&gt; &lt;/th&gt;
+      &lt;th style=&quot;text-align: center&quot;&gt;$f_1(x)=0$&lt;/th&gt;
+      &lt;th style=&quot;text-align: center&quot;&gt;$f_2(x)=x$&lt;/th&gt;
+      &lt;th style=&quot;text-align: center&quot;&gt;$f_3(x)=\bar{x}$&lt;/th&gt;
+      &lt;th&gt;$f_4(x)=1$&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td style=&quot;text-align: center&quot;&gt;0&lt;/td&gt;
+      &lt;td style=&quot;text-align: center&quot;&gt; &lt;/td&gt;
+      &lt;td style=&quot;text-align: center&quot;&gt;0&lt;/td&gt;
+      &lt;td style=&quot;text-align: center&quot;&gt;0&lt;/td&gt;
+      &lt;td style=&quot;text-align: center&quot;&gt;1&lt;/td&gt;
+      &lt;td&gt;1&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td style=&quot;text-align: center&quot;&gt;1&lt;/td&gt;
+      &lt;td style=&quot;text-align: center&quot;&gt; &lt;/td&gt;
+      &lt;td style=&quot;text-align: center&quot;&gt;0&lt;/td&gt;
+      &lt;td style=&quot;text-align: center&quot;&gt;1&lt;/td&gt;
+      &lt;td style=&quot;text-align: center&quot;&gt;0&lt;/td&gt;
+      &lt;td&gt;1&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td style=&quot;text-align: center&quot;&gt; &lt;/td&gt;
+      &lt;td style=&quot;text-align: center&quot;&gt; &lt;/td&gt;
+      &lt;td style=&quot;text-align: center&quot;&gt;constant&lt;/td&gt;
+      &lt;td style=&quot;text-align: center&quot;&gt;balanced&lt;/td&gt;
+      &lt;td style=&quot;text-align: center&quot;&gt;balanced&lt;/td&gt;
+      &lt;td&gt;constant&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;The transformation we need for the oracle is from $\ket{x}\ket{y}$ to $\ket{x}\ket{y⊕f(x)}$ which we can write out explicitly.&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th style=&quot;text-align: center&quot;&gt;$x$ $y$&lt;/th&gt;
+      &lt;th&gt; &lt;/th&gt;
+      &lt;th style=&quot;text-align: center&quot;&gt;$y⊕f_1(x)$&lt;/th&gt;
+      &lt;th style=&quot;text-align: center&quot;&gt;$y⊕f_2(x)$&lt;/th&gt;
+      &lt;th style=&quot;text-align: center&quot;&gt;$y⊕f_3(x)$&lt;/th&gt;
+      &lt;th style=&quot;text-align: center&quot;&gt;$y⊕f_4(x)$&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td style=&quot;text-align: center&quot;&gt;0 0&lt;/td&gt;
+      &lt;td&gt; &lt;/td&gt;
+      &lt;td style=&quot;text-align: center&quot;&gt;0&lt;/td&gt;
+      &lt;td style=&quot;text-align: center&quot;&gt;0&lt;/td&gt;
+      &lt;td style=&quot;text-align: center&quot;&gt;1&lt;/td&gt;
+      &lt;td style=&quot;text-align: center&quot;&gt;1&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td style=&quot;text-align: center&quot;&gt;0 1&lt;/td&gt;
+      &lt;td&gt; &lt;/td&gt;
+      &lt;td style=&quot;text-align: center&quot;&gt;1&lt;/td&gt;
+      &lt;td style=&quot;text-align: center&quot;&gt;1&lt;/td&gt;
+      &lt;td style=&quot;text-align: center&quot;&gt;0&lt;/td&gt;
+      &lt;td style=&quot;text-align: center&quot;&gt;0&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td style=&quot;text-align: center&quot;&gt;1 0&lt;/td&gt;
+      &lt;td&gt; &lt;/td&gt;
+      &lt;td style=&quot;text-align: center&quot;&gt;0&lt;/td&gt;
+      &lt;td style=&quot;text-align: center&quot;&gt;1&lt;/td&gt;
+      &lt;td style=&quot;text-align: center&quot;&gt;0&lt;/td&gt;
+      &lt;td style=&quot;text-align: center&quot;&gt;1&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td style=&quot;text-align: center&quot;&gt;1 1&lt;/td&gt;
+      &lt;td&gt; &lt;/td&gt;
+      &lt;td style=&quot;text-align: center&quot;&gt;1&lt;/td&gt;
+      &lt;td style=&quot;text-align: center&quot;&gt;0&lt;/td&gt;
+      &lt;td style=&quot;text-align: center&quot;&gt;1&lt;/td&gt;
+      &lt;td style=&quot;text-align: center&quot;&gt;0&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;Reading off the columns we have:&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;$y⊕f_1(x)$&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;y&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;I&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;$y⊕f_2(x)$&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;x?~y:y&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;Controlled NOT&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;$y⊕f_3(x)$&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;y?~x:x&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;Reversed Controlled NOT&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;$y⊕f_4(x)$&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;~y&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;NOT&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;The matrices that do those transformations can be written as &lt;a href=&quot;https://en.wikipedia.org/wiki/Matrix_addition#Direct_sum&quot;&gt;direct sums&lt;/a&gt;,which is available in Julia as the &lt;a href=&quot;https://docs.julialang.org/en/v1/stdlib/SparseArrays/index.html#SparseArrays.blockdiag&quot;&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;blockdiag&lt;/code&gt;&lt;/a&gt; function:&lt;/p&gt;
+
+&lt;div class=&quot;language-julia highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;Uf1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;blockdiag&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;eye&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;eye&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;c&quot;&gt;# I&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;Uf2&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;blockdiag&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;eye&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;NOT&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;c&quot;&gt;# C-NOT&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;Uf3&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;blockdiag&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;NOT&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;eye&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;c&quot;&gt;# Reversed C-NOT&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;Uf4&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;blockdiag&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;NOT&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;NOT&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;c&quot;&gt;# NOT&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;If the function, $f$, is &lt;em&gt;balanced&lt;/em&gt; then the measurement will always be true, if &lt;em&gt;constant&lt;/em&gt; then the measurement will always be false. Let’s evaluate them all together:&lt;/p&gt;
+
+&lt;div class=&quot;language-console highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;gp&quot;&gt;julia&amp;gt;&lt;/span&gt; map&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;deutch, &lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;Uf1, Uf2, Uf3, Uf4]&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;Bool[false, true, true, false]
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;We can see that this is exactly the result we expect.&lt;/p&gt;
+
+&lt;p&gt;Extending to multiple bits, the generalised quantum circuit in this case is:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/quantum-computing/deutsch-jozsa-circuit.png&quot; alt=&quot;Deutsch-Jozsa algorithm circuit&quot; width=&quot;400px&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;This is known as the Deutsch-Jozsa algorithm. The wikipedia article has much more information about how this works. In our Julia DSL we can easily extend to 2-bit functions:&lt;/p&gt;
+
+&lt;div class=&quot;language-julia highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;deutchJosza&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Uf&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;register&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ZERO&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;ZERO&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;ONE&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;|&amp;gt;&lt;/span&gt;
+                &lt;span class=&quot;n&quot;&gt;gate&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;H&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;H&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;H&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;|&amp;gt;&lt;/span&gt;
+                &lt;span class=&quot;n&quot;&gt;gate&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Uf&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;|&amp;gt;&lt;/span&gt;
+                &lt;span class=&quot;n&quot;&gt;gate&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;H&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;H&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;eye&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;|&amp;gt;&lt;/span&gt;
+                &lt;span class=&quot;n&quot;&gt;measure&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;We could determine the transformations $U_f$ like before by writing them out explicitly but new we have 8 possible permutations. Rather than writing them out let’s write a function to do it for us:&lt;/p&gt;
+
+&lt;div class=&quot;language-julia highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;oracle&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;Int&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;f&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;begin&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;perm&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Dict&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;Int&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;Int&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;}()&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;x&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;^&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;
+        &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;y&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;
+            &lt;span class=&quot;n&quot;&gt;xy&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;x&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;n&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;y&lt;/span&gt;      &lt;span class=&quot;c&quot;&gt;# |x&amp;gt;|y&amp;gt;&lt;/span&gt;
+            &lt;span class=&quot;n&quot;&gt;fxy&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;y&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;⊻&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;f&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;x&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt;         &lt;span class=&quot;c&quot;&gt;# |y⊕f(x)&amp;gt;&lt;/span&gt;
+            &lt;span class=&quot;n&quot;&gt;xfxy&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;x&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;n&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;fxy&lt;/span&gt;  &lt;span class=&quot;c&quot;&gt;# |x&amp;gt;|y⊕f(x)&amp;gt;&lt;/span&gt;
+            &lt;span class=&quot;n&quot;&gt;perm&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;xy&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;+&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;]&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;xfxy&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;+&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;    &lt;span class=&quot;c&quot;&gt;# mapping (1-index based)&lt;/span&gt;
+        &lt;span class=&quot;k&quot;&gt;end&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;end&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;permmat&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;map&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;((&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;it&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;perm&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;it&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;],&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;^&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;+&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)))&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;end&lt;/span&gt;
+
+&lt;span class=&quot;n&quot;&gt;permmat&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;π&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;sparse&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;length&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;π&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;),&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;π&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;This function goes through the $2^n$ possible values of $\ket{x}$ and the two possible values of $\ket{y} \in (0,1)$ and builds a transformation table, &lt;code class=&quot;highlighter-rouge&quot;&gt;perm&lt;/code&gt;, of the values $\ket{x}\ket{y}$ to $\ket{x}\ket{y⊕f(x)}$. This table is then used to create a (sparse) permutation matrix for the transformation, e.g. $U_f$. This is a very brutish way of doing it but it gets the job done.&lt;/p&gt;
+
+&lt;p&gt;Finally we can run the algorithm and check it works&lt;/p&gt;
+
+&lt;div class=&quot;language-julia highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;deutchJosza&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Uf&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;register&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ZERO&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;ZERO&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;ONE&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;|&amp;gt;&lt;/span&gt;
+                &lt;span class=&quot;n&quot;&gt;gate&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;H&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;H&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;H&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;|&amp;gt;&lt;/span&gt;
+                &lt;span class=&quot;n&quot;&gt;gate&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Uf&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;|&amp;gt;&lt;/span&gt;
+                &lt;span class=&quot;n&quot;&gt;gate&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;H&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;H&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;eye&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;|&amp;gt;&lt;/span&gt;
+                &lt;span class=&quot;n&quot;&gt;measure&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;|&amp;gt;&lt;/span&gt;
+                &lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;y&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;reinterpret&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;Int&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;y&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;chunks&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;]&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;!=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;
+
+
+&lt;span class=&quot;n&quot;&gt;Uf1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;oracle&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;x&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;y&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;y&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;⊻&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;Uf2&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;oracle&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;x&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;y&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;y&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;⊻&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;x&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;))&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;Uf3&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;oracle&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;x&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;y&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;y&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;⊻&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;x&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;⊻&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;))&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;Uf4&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;oracle&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;x&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;y&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;y&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;⊻&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt;
+
+&lt;span class=&quot;nd&quot;&gt;@test&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;map&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;deutchJosza&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Uf1&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Uf2&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Uf3&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Uf4&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;])&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;false&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;true&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;true&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;false&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;]&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;The line &lt;code class=&quot;highlighter-rouge&quot;&gt;reinterpret(Int, y.chunks)[1] != 0&lt;/code&gt; converts the binary result to an integer and checks if it’s different from 0.&lt;/p&gt;
+
+&lt;p&gt;That’s the Deutch-Jozsa algorithm complete. Next one will be Grover’s algorithm, then Simon’s algorithm before we get into the QFT and finally Shor’s famous factoring algorithm.&lt;/p&gt;
+
+</description>
+        <pubDate>Mon, 17 Jun 2019 23:50:00 +0200</pubDate>
+        <link>/articles/building-a-qpu-simulator-in-julia-part-4</link>
+        <guid isPermaLink="true">/articles/building-a-qpu-simulator-in-julia-part-4</guid>
+        
+        <category>quantum computing</category>
+        
+        <category>julia</category>
+        
+        
+      </item>
+    
+      <item>
+        <title>The Hodgepodge Machine</title>
+        <description>&lt;blockquote&gt;
+  &lt;p&gt;“&lt;em&gt;The pleasure of complexity… the inconceivable nature of nature&lt;/em&gt;” - &lt;a href=&quot;https://youtu.be/tD_XAX--Ono?t=67&quot;&gt;Richard Feynmann&lt;/a&gt;&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;Back in the 80s, my Dad used to work as a security guard at a &lt;a href=&quot;https://en.wikipedia.org/wiki/Rosemanowes_Quarry&quot;&gt;geothermal energy research site&lt;/a&gt; and sometimes I would accompany him on his rounds. The facility was well funded and very advanced for its time and there was all kinds of computer equipment which was at that time both fascinating and alien to me. There was also a collection of science and technology magazines and sometimes I would read them for hours.&lt;/p&gt;
+
+&lt;p&gt;The magazines I liked most were Computer Weekly and Scientific American. I liked them mostly for their programming sections. Back in those pre-internet days it was common for the articles to include listings, mostly in Fortran, BASIC and maybe Pascal and even Assembler&lt;label for=&quot;assembler&quot; class=&quot;margin-toggle sidenote-number&quot;&gt;&lt;/label&gt;&lt;input type=&quot;checkbox&quot; id=&quot;assembler&quot; class=&quot;margin-toggle&quot; /&gt;&lt;span class=&quot;sidenote&quot;&gt;Yep, we used to type machine code by hand! &lt;/span&gt;. That’s how I learned to code.&lt;/p&gt;
+
+&lt;p&gt;One &lt;a href=&quot;https://www.jstor.org/stable/24989205?seq=1#page_scan_tab_contents&quot;&gt;article&lt;/a&gt; I remember particularly fondly was in Scientific American’s Computer Recreations section with the caption “&lt;em&gt;The hodgepodge machine makes waves&lt;/em&gt;“&lt;label for=&quot;citation&quot; class=&quot;margin-toggle sidenote-number&quot;&gt;&lt;/label&gt;&lt;input type=&quot;checkbox&quot; id=&quot;citation&quot; class=&quot;margin-toggle&quot; /&gt;&lt;span class=&quot;sidenote&quot;&gt;Dewdney, A. (1988). COMPUTER RECREATIONS. &lt;em&gt;Scientific American&lt;/em&gt;, &lt;em&gt;259(2)&lt;/em&gt;, 104-107. Retrieved from http://www.jstor.org/stable/24989205 &lt;/span&gt;. The date was August 1988. It described a set of rules which mimicked a type of chemical reaction, the so called &lt;a href=&quot;https://en.wikipedia.org/wiki/Belousov%E2%80%93Zhabotinsky_reaction&quot;&gt;Belousov-Zhabotinsky reaction&lt;/a&gt;, and resulted in fantastic shapes and behaviours emerging almost like magic. I was able to reproduce that at the time on my Amstrad CPC even though it took ages to update each frame. It was one of my first programming successes.&lt;/p&gt;
+
+&lt;p&gt;A few weeks ago one of my colleagues at Codurance wrote an article called &lt;a href=&quot;https://codurance.com/2019/05/30/nature-in-code/&quot;&gt;&lt;em&gt;Nature in Code&lt;/em&gt;&lt;/a&gt; where she simulated biological interactions in code and how interesting phenomena emerge naturally. It reminded me of the Hodgepodge Machine and inspired me to try it again with more modern techniques (thank you Solange). So I sat down this morning, and with a little help from this &lt;a href=&quot;https://softologyblog.wordpress.com/2017/02/04/the-belousov-zhabotinsky-reaction-and-the-hodgepodge-machine/&quot;&gt;blog post&lt;/a&gt;, wrote it in Julia. This is the result.&lt;/p&gt;
+&lt;p /&gt;
+
+&lt;iframe width=&quot;560&quot; height=&quot;315&quot; src=&quot;https://www.youtube.com/embed/9HPaottA9tE&quot; frameborder=&quot;0&quot; allow=&quot;accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture&quot; allowfullscreen=&quot;&quot;&gt;&lt;/iframe&gt;
+
+&lt;p&gt;Compare that to this real reaction:&lt;/p&gt;
+&lt;p /&gt;
+
+&lt;iframe width=&quot;560&quot; height=&quot;315&quot; src=&quot;https://www.youtube.com/embed/8tArShb1fhw?start=57&quot; frameborder=&quot;0&quot; allow=&quot;accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture&quot; allowfullscreen=&quot;&quot;&gt;&lt;/iframe&gt;
+
+&lt;p&gt;This ties in with recent work I’ve been doing on dynamical systems and complexity. The hodgepodge machine &lt;em&gt;is&lt;/em&gt; a dynamical system: deterministic but, under certain conditions, totally unpredictable.&lt;/p&gt;
+
+&lt;p&gt;As Feynman said, “&lt;em&gt;And it’s all really there…but you’ve got to stop and think about it to really get the pleasure about the complexity;
+the inconceivable [he chuckles] nature of nature.&lt;/em&gt;”.&lt;/p&gt;
+
+&lt;p&gt;Code is on GitHub &lt;a href=&quot;https://gist.github.com/johnhearn/e17cc9d2e98f7bf3db1012d2046fba78&quot;&gt;here&lt;/a&gt;.&lt;/p&gt;
+</description>
+        <pubDate>Sat, 08 Jun 2019 17:16:00 +0200</pubDate>
+        <link>/articles/hodgepodge-machine-in-julia</link>
+        <guid isPermaLink="true">/articles/hodgepodge-machine-in-julia</guid>
+        
+        <category>complexity</category>
+        
+        <category>julia</category>
+        
+        
+      </item>
+    
+      <item>
+        <title>Chaotic Waterwheel with Planck</title>
+        <description>&lt;p&gt;&lt;label for=&quot;malkus&quot; class=&quot;margin-toggle&quot;&gt;⊕&lt;/label&gt;&lt;input type=&quot;checkbox&quot; id=&quot;malkus&quot; class=&quot;margin-toggle&quot; /&gt;&lt;span class=&quot;marginnote&quot;&gt;&lt;img class=&quot;fullwidth&quot; src=&quot;/assets/images/complexity/malkus_wheel.gif&quot; /&gt;&lt;br /&gt;A schematic of the chaotic Malkus waterwheel discussed by Steven Strogatz in &lt;a href=&quot;https://www.youtube.com/watch?v=HljJv7Hf6Zo&quot;&gt;lecture 15&lt;/a&gt; of his course.&lt;/span&gt;
+I’m just finishing &lt;a href=&quot;https://twitter.com/stevenstrogatz?ref_src=twsrc%5Egoogle%7Ctwcamp%5Eserp%7Ctwgr%5Eauthor&quot;&gt;Steven Strogatz&lt;/a&gt;’s &lt;a href=&quot;https://www.youtube.com/playlist?list=PLbN57C5Zdl6j_qJA-pARJnKsmROzPnO9V&quot;&gt;Nonlinear Dynamics and Chaos&lt;/a&gt; course and one of the systems he discusses is the chaotic Malkus water wheel. This is a real set up devised to mimic the famous &lt;a href=&quot;https://en.wikipedia.org/wiki/Lorenz_system&quot;&gt;Lorenz equations&lt;/a&gt;.&lt;/p&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;“&lt;em&gt;In the 1960s… a real system was needed to demonstrate that chaos and the butterfly effect were realities and not mere mathematical artefacts… W.V.R. Malkus, a mathematician at MIT, realized that the Lorenz-Equations can be transformed into the equations of motion of a waterwheel. This waterwheel was built at MIT in the 1970s and helped to convince the sceptical physicists of the reality of chaos&lt;/em&gt;” - taken from &lt;a href=&quot;http://goodshare.org/wp/climate-bai/&quot;&gt;here&lt;/a&gt;&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;It consists of a stream of water feeding into multiple, leaky cups mounted on a rotating wheel. The weights of the cups containing water produce a chaotic behaviour causing the wheel to rotate in different directions unpredictably.
+&lt;label for=&quot;real&quot; class=&quot;margin-toggle&quot;&gt;⊕&lt;/label&gt;&lt;input type=&quot;checkbox&quot; id=&quot;real&quot; class=&quot;margin-toggle&quot; /&gt;&lt;span class=&quot;marginnote&quot;&gt;&lt;img class=&quot;fullwidth&quot; src=&quot;/assets/images/complexity/malkus_wheel.jpeg&quot; /&gt;&lt;br /&gt;A real construction of the wheel. &lt;a href=&quot;https://www.youtube.com/watch?v=51FgNhrS6jg&quot;&gt;Here&lt;/a&gt;’s another one with a video.&lt;/span&gt;
+So today I thought I’d play with this idea and try to reproduce it in a 2D physics engine. I chose &lt;a href=&quot;http://piqnt.com/planck.js/&quot;&gt;Planck&lt;/a&gt;, a JavaScript physics engine based on the Box2D implementation in C++.&lt;/p&gt;
+
+&lt;p&gt;It turns out I could create something resembling the waterwheel but it’s not as smooth as it could be. Counter-clockwise rotations seem to jump around everywhere and adding more than three cups makes it go all wrong. Maybe it’s a bug in Planck?&lt;/p&gt;
+
+&lt;p&gt;It took a while to tune the size of the balls representing the water flow and the gaps in the cups which regulate the outflow. It’s far from perfect but it demonstrates the idea.&lt;/p&gt;
+
+&lt;p&gt;Maybe one day I’ll try with a different engine, or maybe this one can be improved, I don’t know.&lt;/p&gt;
+
+&lt;p&gt;Anyway here’s the result.&lt;/p&gt;
+
+&lt;pre&gt;
+&lt;iframe width=&quot;400&quot; height=&quot;400&quot; src=&quot;/assets/frames/chaos-wheel-planck.html&quot;&gt;
+&amp;lt;/pre&amp;gt;
+&lt;/iframe&gt;&lt;/pre&gt;
+</description>
+        <pubDate>Sun, 02 Jun 2019 18:22:00 +0200</pubDate>
+        <link>/articles/simulate-chaotic-water-wheel-with-planck</link>
+        <guid isPermaLink="true">/articles/simulate-chaotic-water-wheel-with-planck</guid>
+        
+        <category>complexity</category>
+        
+        <category>javascript</category>
+        
+        
+      </item>
+    
+      <item>
+        <title>Building a QPU simulator in Julia - Part 3</title>
+        <description>&lt;p&gt;In the &lt;a href=&quot;building-a-qpu-simulator-in-julia-part-2&quot;&gt;last post&lt;/a&gt; we were able to build a functional quantum register and used it to create a simple circuit for a &lt;a href=&quot;quantum-random-number-generator&quot;&gt;quantum random number generator&lt;/a&gt;. It worked directly with registers up to about 11 bits when the amount of memory required to represent the operations on the register surpassed the available resources.&lt;/p&gt;
+
+&lt;p&gt;This short post is to see if we can improve the simple functions we wrote to increase the performance.&lt;/p&gt;
+
+&lt;p&gt;The first obvious thing to try is to use sparse matrices instead of dense ones. This is especially important when lifting the operators over large registers because the dense matrices are full of zeros. For example take a hadamard operator lift into the 2rd position of a 3-bit register. The lifted matrix becomes:&lt;/p&gt;
+
+&lt;div class=&quot;language-console highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;gp&quot;&gt;julia&amp;gt;&lt;/span&gt; lift&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;3, 2, H&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;8×8 Array{Float32,2}:
+ 0.707107  0.0        0.707107   0.0       0.0       0.0        0.0        0.0     
+ 0.0       0.707107   0.0        0.707107  0.0       0.0        0.0        0.0     
+ 0.707107  0.0       -0.707107  -0.0       0.0       0.0       -0.0       -0.0     
+ 0.0       0.707107  -0.0       -0.707107  0.0       0.0       -0.0       -0.0     
+ 0.0       0.0        0.0        0.0       0.707107  0.0        0.707107   0.0     
+ 0.0       0.0        0.0        0.0       0.0       0.707107   0.0        0.707107
+ 0.0       0.0       -0.0       -0.0       0.707107  0.0       -0.707107  -0.0     
+ 0.0       0.0       -0.0       -0.0       0.0       0.707107  -0.0       -0.707107
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;This matrix has a high density of zeros, something which indicates that a sparce representation may be better. Luckily &lt;a href=&quot;https://julialang.org/&quot;&gt;Julia&lt;/a&gt; includes support for sparce matrices as part of the &lt;code class=&quot;highlighter-rouge&quot;&gt;SparseArrays&lt;/code&gt; package and then we can simply start creating sparse matrices with a couple of simple changes:&lt;/p&gt;
+
+&lt;div class=&quot;language-julia highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;k&quot;&gt;using&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;SparseArrays&lt;/span&gt;
+
+&lt;span class=&quot;n&quot;&gt;ZERO&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;sparsevec&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;([&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;],&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mf&quot;&gt;1f0&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;],&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;ONE&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;sparsevec&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;([&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;],&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mf&quot;&gt;1f0&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;],&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt;
+
+&lt;span class=&quot;n&quot;&gt;eye&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;sparse&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;I&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;div class=&quot;language-console highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;gp&quot;&gt;julia&amp;gt;&lt;/span&gt; lift&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;3, 2, H&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;8×8 SparseMatrixCSC{Float32,Int64} with 16 stored entries:
+  [1, 1]  =  0.707107
+  [3, 1]  =  0.707107
+  [2, 2]  =  0.707107
+  [4, 2]  =  0.707107
+  [1, 3]  =  0.707107
+  [3, 3]  =  -0.707107
+  [2, 4]  =  0.707107
+  [4, 4]  =  -0.707107
+  [5, 5]  =  0.707107
+  [7, 5]  =  0.707107
+  [6, 6]  =  0.707107
+  [8, 6]  =  0.707107
+  [5, 7]  =  0.707107
+  [7, 7]  =  -0.707107
+  [6, 8]  =  0.707107
+  [8, 8]  =  -0.707107
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;We have reduced the memory footprint of the matrix by a factor of 4. In fact the saving is exponential: a &lt;script type=&quot;math/tex&quot;&gt;2^n \times 2^n&lt;/script&gt; array becomes a sparse representation with &lt;script type=&quot;math/tex&quot;&gt;2^{n+1}&lt;/script&gt; entries.&lt;/p&gt;
+
+&lt;p&gt;Trying the same benchmark again gives us much better results:&lt;/p&gt;
+
+&lt;div class=&quot;language-julia highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;n&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;11&lt;/span&gt;
+&lt;span class=&quot;nd&quot;&gt;@time&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;print&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;toInt&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;measureAll&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;hadamard&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;register&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;))[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;]))&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;end&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+&lt;div class=&quot;language-console highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;go&quot;&gt;0  0.000075 seconds (23 allocations: 1.047 KiB)
+3  0.000034 seconds (41 allocations: 1.969 KiB)
+0  0.000019 seconds (51 allocations: 3.016 KiB)
+15  0.000029 seconds (73 allocations: 5.516 KiB)
+12  0.000030 seconds (84 allocations: 11.422 KiB)
+46  0.000038 seconds (102 allocations: 31.031 KiB)
+62  0.000103 seconds (119 allocations: 102.750 KiB)
+143  0.000190 seconds (134 allocations: 374.313 KiB)
+301  0.000605 seconds (150 allocations: 1.396 MiB)
+130  0.002381 seconds (159 allocations: 5.463 MiB)
+666  0.016114 seconds (202 allocations: 21.679 MiB)
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Lets see how far we can go…&lt;/p&gt;
+
+&lt;div class=&quot;language-julia highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;n&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;12&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;16&lt;/span&gt;
+&lt;span class=&quot;nd&quot;&gt;@time&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;print&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;toInt&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;measureAll&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;hadamard&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;register&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;))[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;]))&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;end&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+&lt;div class=&quot;language-console highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;go&quot;&gt;1131  0.064576 seconds (199 allocations: 85.922 MiB)
+430  0.296749 seconds (252 allocations: 342.593 MiB)
+12847  1.547630 seconds (285 allocations: 1.336 GiB, 32.59% gc time)
+24906  4.267627 seconds (317 allocations: 5.340 GiB, 4.51% gc time)
+63277 39.087846 seconds (787 allocations: 21.372 GiB, 6.12% gc time)
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;It turns out that we’ve improved the performance by a factor of about 32! Not a bad for a 3 line change :)&lt;/p&gt;
+
+&lt;p&gt;There are more things to do like in-place multiplications but I’d like to implement some of the standard algorithms first to compare performance in more varied circumstances. That’ll be for next time.&lt;/p&gt;
+
+</description>
+        <pubDate>Fri, 24 May 2019 08:22:00 +0200</pubDate>
+        <link>/articles/building-a-qpu-simulator-in-julia-part-3</link>
+        <guid isPermaLink="true">/articles/building-a-qpu-simulator-in-julia-part-3</guid>
+        
+        <category>quantum computing</category>
+        
+        <category>julia</category>
+        
+        
+      </item>
+    
+      <item>
+        <title>Communication Clarity Confidence</title>
+        <description>&lt;p&gt;One of my main goals for this year is to improve communication and leadership skills at work. These are not things that come easily to me so for many years I’ve concentrated on the technical side and dodged leadership positions wherever possible. That is not a sustainable position in the long run because as an “experienced&lt;label for=&quot;old&quot; class=&quot;margin-toggle sidenote-number&quot;&gt;&lt;/label&gt;&lt;input type=&quot;checkbox&quot; id=&quot;old&quot; class=&quot;margin-toggle&quot; /&gt;&lt;span class=&quot;sidenote&quot;&gt;i.e. “old” &lt;/span&gt;” professional, it is increasingly necessary for me to be able to pass on what I have learned to individuals, teams and organisations.&lt;/p&gt;
+
+&lt;p&gt;So I’ve been doing some research into how someone with my particular personality might improve their leadership skills and, since &lt;em&gt;&lt;a href=&quot;https://en.wikipedia.org/wiki/Rule_of_three_(writing)#Rhetoric_and_public_speaking&quot;&gt;omne trium perfectum&lt;/a&gt;&lt;/em&gt;, I’ve come up with a plan with three elements, which just happens to &lt;a href=&quot;https://en.wikipedia.org/wiki/Alliteration#Rhetoric&quot;&gt;alliterate&lt;/a&gt; as well:&lt;/p&gt;
+
+&lt;div class=&quot;graphviz-wrapper&quot;&gt;
+
+&lt;!-- Generated by graphviz version 2.40.1 (20161225.0304)
+ --&gt;
+&lt;!-- Title: communication&amp;#45;clarity&amp;#45;confidence Pages: 1 --&gt;
+&lt;svg role=&quot;img&quot; aria-label=&quot;graphviz-feeba0173f200336f1bdb247965dc4a4&quot; width=&quot;273pt&quot; height=&quot;215pt&quot; viewBox=&quot;0.00 0.00 273.15 214.51&quot;&gt;
+&lt;title&gt;graphviz-feeba0173f200336f1bdb247965dc4a4&lt;/title&gt;
+&lt;desc&gt;
+digraph &amp;quot;communication-clarity-confidence&amp;quot; {
+  Communication-&amp;gt;Clarity [dir=&amp;quot;both&amp;quot;]
+  Clarity-&amp;gt;Confidence [dir=&amp;quot;both&amp;quot;]
+  Confidence-&amp;gt;Communication [dir=&amp;quot;both&amp;quot;]
+}
+&lt;/desc&gt;
+
+&lt;g id=&quot;graph0&quot; class=&quot;graph&quot; transform=&quot;scale(1 1) rotate(0) translate(4 210.5141)&quot;&gt;
+&lt;title&gt;communication&amp;#45;clarity&amp;#45;confidence&lt;/title&gt;
+&lt;polygon fill=&quot;#ffffff&quot; stroke=&quot;transparent&quot; points=&quot;-4,4 -4,-210.5141 269.1483,-210.5141 269.1483,4 -4,4&quot; /&gt;
+&lt;!-- Communication --&gt;
+&lt;g id=&quot;node1&quot; class=&quot;node&quot;&gt;
+&lt;title&gt;Communication&lt;/title&gt;
+&lt;ellipse fill=&quot;none&quot; stroke=&quot;#000000&quot; cx=&quot;67.0928&quot; cy=&quot;-18&quot; rx=&quot;67.1857&quot; ry=&quot;18&quot; /&gt;
+&lt;text text-anchor=&quot;middle&quot; x=&quot;67.0928&quot; y=&quot;-13.8&quot; font-family=&quot;Times,serif&quot; font-size=&quot;14.00&quot; fill=&quot;#000000&quot;&gt;Communication&lt;/text&gt;
+&lt;/g&gt;
+&lt;!-- Clarity --&gt;
+&lt;g id=&quot;node2&quot; class=&quot;node&quot;&gt;
+&lt;title&gt;Clarity&lt;/title&gt;
+&lt;ellipse fill=&quot;none&quot; stroke=&quot;#000000&quot; cx=&quot;67.0928&quot; cy=&quot;-188.5141&quot; rx=&quot;34.8371&quot; ry=&quot;18&quot; /&gt;
+&lt;text text-anchor=&quot;middle&quot; x=&quot;67.0928&quot; y=&quot;-184.3141&quot; font-family=&quot;Times,serif&quot; font-size=&quot;14.00&quot; fill=&quot;#000000&quot;&gt;Clarity&lt;/text&gt;
+&lt;/g&gt;
+&lt;!-- Communication&amp;#45;&amp;gt;Clarity --&gt;
+&lt;g id=&quot;edge1&quot; class=&quot;edge&quot;&gt;
+&lt;title&gt;Communication&amp;#45;&amp;gt;Clarity&lt;/title&gt;
+&lt;path fill=&quot;none&quot; stroke=&quot;#000000&quot; d=&quot;M67.0928,-46.3629C67.0928,-77.8975 67.0928,-128.5353 67.0928,-160.0932&quot; /&gt;
+&lt;polygon fill=&quot;#000000&quot; stroke=&quot;#000000&quot; points=&quot;70.5929,-46.248 67.0928,-36.248 63.5929,-46.248 70.5929,-46.248&quot; /&gt;
+&lt;polygon fill=&quot;#000000&quot; stroke=&quot;#000000&quot; points=&quot;63.5929,-160.3972 67.0928,-170.3973 70.5929,-160.3973 63.5929,-160.3972&quot; /&gt;
+&lt;/g&gt;
+&lt;!-- Confidence --&gt;
+&lt;g id=&quot;node3&quot; class=&quot;node&quot;&gt;
+&lt;title&gt;Confidence&lt;/title&gt;
+&lt;ellipse fill=&quot;none&quot; stroke=&quot;#000000&quot; cx=&quot;214.7623&quot; cy=&quot;-103.257&quot; rx=&quot;50.2723&quot; ry=&quot;18&quot; /&gt;
+&lt;text text-anchor=&quot;middle&quot; x=&quot;214.7623&quot; y=&quot;-99.057&quot; font-family=&quot;Times,serif&quot; font-size=&quot;14.00&quot; fill=&quot;#000000&quot;&gt;Confidence&lt;/text&gt;
+&lt;/g&gt;
+&lt;!-- Clarity&amp;#45;&amp;gt;Confidence --&gt;
+&lt;g id=&quot;edge2&quot; class=&quot;edge&quot;&gt;
+&lt;title&gt;Clarity&amp;#45;&amp;gt;Confidence&lt;/title&gt;
+&lt;path fill=&quot;none&quot; stroke=&quot;#000000&quot; d=&quot;M99.426,-169.8465C123.0335,-156.2167 155.0242,-137.7468 179.3256,-123.7164&quot; /&gt;
+&lt;polygon fill=&quot;#000000&quot; stroke=&quot;#000000&quot; points=&quot;97.4017,-166.9737 90.4914,-175.0048 100.9017,-173.0359 97.4017,-166.9737&quot; /&gt;
+&lt;polygon fill=&quot;#000000&quot; stroke=&quot;#000000&quot; points=&quot;181.3191,-126.6069 188.2294,-118.5758 177.8191,-120.5448 181.3191,-126.6069&quot; /&gt;
+&lt;/g&gt;
+&lt;!-- Confidence&amp;#45;&amp;gt;Communication --&gt;
+&lt;g id=&quot;edge3&quot; class=&quot;edge&quot;&gt;
+&lt;title&gt;Confidence&amp;#45;&amp;gt;Communication&lt;/title&gt;
+&lt;path fill=&quot;none&quot; stroke=&quot;#000000&quot; d=&quot;M179.3154,-82.7918C156.6154,-69.6859 127.2093,-52.7083 104.1935,-39.4201&quot; /&gt;
+&lt;polygon fill=&quot;#000000&quot; stroke=&quot;#000000&quot; points=&quot;177.6102,-85.8487 188.0204,-87.8176 181.1102,-79.7865 177.6102,-85.8487&quot; /&gt;
+&lt;polygon fill=&quot;#000000&quot; stroke=&quot;#000000&quot; points=&quot;105.8066,-36.31 95.3963,-34.3411 102.3066,-42.3722 105.8066,-36.31&quot; /&gt;
+&lt;/g&gt;
+&lt;/g&gt;
+&lt;/svg&gt;
+&lt;/div&gt;
+
+&lt;p&gt;Notice that the arrows are bidirectional, that is each one feeds into the others. Lets start with communication.&lt;/p&gt;
+
+&lt;h2 id=&quot;communication&quot;&gt;Communication&lt;/h2&gt;
+
+&lt;p&gt;There are different forms fo communication. &lt;strong&gt;Verbal communication&lt;/strong&gt;, requires us to linearise the concepts within our heads into a train of words. Steven Pinker describes this very well in &lt;a href=&quot;https://youtu.be/OV5J6BfToSw?t=1545&quot;&gt;this talk&lt;/a&gt; about writing style. These webs of knowledge will be quite complicated and we may not even be aware of all the connections ourselves. &lt;strong&gt;The more clarity we have of those connections, the easier it is to convert them to words&lt;/strong&gt;.&lt;/p&gt;
+
+&lt;p&gt;This also works the other way around: &lt;strong&gt;forcing yourself to write can encourage greater clarity&lt;/strong&gt;. So many times has the simple act of writing an idea down made it clear where the holes or inconsistencies are. This is the main reason for writing this blog.&lt;/p&gt;
+
+&lt;p&gt;Another thing that I must bear in mind is to use the &lt;strong&gt;right vocabulary for the situation&lt;/strong&gt;. I love language and especially esoteric words with highly specific meanings but sometimes literary embellishments are not appropriate&lt;label for=&quot;literary&quot; class=&quot;margin-toggle sidenote-number&quot;&gt;&lt;/label&gt;&lt;input type=&quot;checkbox&quot; id=&quot;literary&quot; class=&quot;margin-toggle&quot; /&gt;&lt;span class=&quot;sidenote&quot;&gt;Although in this blog I can do whatever I want 😉 &lt;/span&gt; for an email or Slack message at work. Also I work in multi-lingual and multi-cultural environments so finding the right level is essential&lt;label for=&quot;globish&quot; class=&quot;margin-toggle sidenote-number&quot;&gt;&lt;/label&gt;&lt;input type=&quot;checkbox&quot; id=&quot;globish&quot; class=&quot;margin-toggle&quot; /&gt;&lt;span class=&quot;sidenote&quot;&gt;For example, ensuring to use &lt;a href=&quot;https://en.wikipedia.org/wiki/International_English&quot;&gt;globish&lt;/a&gt; with non-native speakers of English. &lt;/span&gt;.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Visual communication&lt;/strong&gt; through images and diagrams is something which I have used extensively in the past, maybe as a substitute for verbal skills 🤔. Visual communication skills are essential for software engineers although this seems to be waning in recent years. We must be adaptable and make sure this kind of communication is appropriate in a given situation. An elevator pitch to non-technical people or an informal chat are example of where it might not be.&lt;/p&gt;
+
+&lt;p&gt;Another important form of communication is through body language. Psychologically, &lt;strong&gt;body language has a huge conscious and sub-conscious effect&lt;/strong&gt; on the people we talk to and interact with. Just some things to think about:&lt;/p&gt;
+&lt;ul&gt;
+  &lt;li&gt;Appropriate eye contact, handshake and physical contact&lt;/li&gt;
+  &lt;li&gt;Posture and &lt;a href=&quot;https://www.youtube.com/watch?v=ZZZ7k8cMA-4&quot;&gt;hand gestures&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;The other side of communication is &lt;strong&gt;listening&lt;/strong&gt;. Many times I have been told that I’m not present in conversations and that is often true because a “tree” of possibilities and consequences of what the other person is saying overwhelms me. &lt;a href=&quot;https://www.youtube.com/watch?v=H6n3iNh4XLI&quot;&gt;Being present is key to good communication&lt;/a&gt;.&lt;/p&gt;
+
+&lt;h2 id=&quot;clarity&quot;&gt;Clarity&lt;/h2&gt;
+
+&lt;p&gt;If you don’t have clarity in your ideas it will be impossible to communicate them effectively. &lt;strong&gt;Arguments must be coherent to be viable, which is not the same as being right&lt;/strong&gt;, a mistake made very often which I must try to avoid.&lt;/p&gt;
+
+&lt;p&gt;Like it or not, &lt;strong&gt;the right level of confidence is an essential part of persuasive communication&lt;/strong&gt;. We are humans and we evaluate what people are saying not only on &lt;em&gt;what&lt;/em&gt; is being said but also &lt;em&gt;how&lt;/em&gt; it is being said.&lt;/p&gt;
+
+&lt;h2 id=&quot;confidence&quot;&gt;Confidence&lt;/h2&gt;
+
+&lt;p&gt;Confidence requires clarity of ideas but is not about bullying or not being wrong. Quite the opposite. &lt;strong&gt;Confidence is about being able to state an opinion but also to recognise better ideas and the ability to accept mistakes without feeling personal failure&lt;/strong&gt;. Confidence also ties back to body language which is essential for maintaining credibility and holding interest.&lt;/p&gt;
+
+&lt;h2 id=&quot;actions&quot;&gt;Actions&lt;/h2&gt;
+
+&lt;p&gt;In terms of actions, I have a number of ideas which, no doubt, will grow over time.&lt;/p&gt;
+&lt;ul&gt;
+  &lt;li&gt;To continue writing this blog which I am finding to be very valuable. I’ll also continue contributing to the company blog.&lt;/li&gt;
+  &lt;li&gt;I have been asking colleagues to film me while talking so that I can pick up on any bad habits which others might not feel comfortable pointing out.&lt;/li&gt;
+  &lt;li&gt;We have a tool for soliciting feedback from co-workers and these are the areas where I’ll be doing that.&lt;/li&gt;
+  &lt;li&gt;I’ll also be taking any opportunity for speaking, for example lightning talks, open spaces, or presentations for the community of practice session we run, etc.&lt;/li&gt;
+  &lt;li&gt;For what it’s worth, I’m dabbling in social-media as well.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;So this trinity of skills, communication, clarity and confidence, represent my approach becoming a better leader. Hopefully this will make progress measurable and allow me to define some reachable goals.&lt;/p&gt;
+
+</description>
+        <pubDate>Sat, 18 May 2019 10:30:00 +0200</pubDate>
+        <link>/articles/communication-clarity-confidence</link>
+        <guid isPermaLink="true">/articles/communication-clarity-confidence</guid>
+        
+        <category>communication</category>
+        
+        <category>leadership</category>
+        
+        
+      </item>
+    
+      <item>
+        <title>Building a QPU simulator in Julia - Part 2</title>
+        <description>&lt;p&gt;In the &lt;a href=&quot;building-a-qpu-simulator-in-julia-part-1&quot;&gt;last post&lt;/a&gt; we saw how the Julia programming language has several advantages over Kotlin and Clojure for building a quantum computer simulator. This post covers how we might do that&lt;label for=&quot;maths&quot; class=&quot;margin-toggle sidenote-number&quot;&gt;&lt;/label&gt;&lt;input type=&quot;checkbox&quot; id=&quot;maths&quot; class=&quot;margin-toggle&quot; /&gt;&lt;span class=&quot;sidenote&quot;&gt;Note: These notes go into some pretty heavy maths. For a less mathematical description of quantum computing concepts, take a look at &lt;a href=&quot;quantum-computing-primer-part-1a&quot;&gt;this article&lt;/a&gt;. &lt;/span&gt;. We’ll start as &lt;a href=&quot;building-a-qpu-simulator-in-clojure-part-1&quot;&gt;before&lt;/a&gt; with a simple case of an 8-sided &lt;a href=&quot;quantum-random-number-generator&quot;&gt;quantum die&lt;/a&gt;. This is the code written with the &lt;a href=&quot;https://github.com/johnhearn/quko&quot;&gt;Quko&lt;/a&gt; library (from the &lt;a href=&quot;https://github.com/johnhearn/quko&quot;&gt;README&lt;/a&gt;):&lt;/p&gt;
+
+&lt;div class=&quot;language-kotlin highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;kd&quot;&gt;val&lt;/span&gt; &lt;span class=&quot;py&quot;&gt;qubits&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Qubits&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;m&quot;&gt;3&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;).&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;hadamard&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;m&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;..&lt;/span&gt;&lt;span class=&quot;m&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;print&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;qubits&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;measureAll&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;().&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;toInt&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;())&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Written in Julia this becomes:&lt;/p&gt;
+
+&lt;div class=&quot;language-julia highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;qubits&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;hadamard&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;qubits&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;3&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;),&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;3&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;print&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;toInt&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;measureAll&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;qubits&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;))&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Some things to notice. Firstly we’ve moved to a functional style. As typing is optional there is no need to define the variable. Also the range specified by &lt;code class=&quot;highlighter-rouge&quot;&gt;1:3&lt;/code&gt; is using &lt;a href=&quot;https://craftofcoding.wordpress.com/2017/03/12/why-1-based-indexing-is-ok/&quot;&gt;1-based indexing&lt;/a&gt;.&lt;/p&gt;
+
+&lt;h2 id=&quot;measurement-of-single-qubit&quot;&gt;Measurement of Single Qubit&lt;/h2&gt;
+
+&lt;p&gt;We’ll define a test to verify the probability that our qubit is measured &lt;code class=&quot;highlighter-rouge&quot;&gt;false&lt;/code&gt;.&lt;/p&gt;
+
+&lt;div class=&quot;language-julia highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;repeatedly&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;f&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;map&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;x&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;f&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(),&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;collect&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;))&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;sample&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;f&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;count&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;repeatedly&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;f&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;))&lt;/span&gt;
+
+&lt;span class=&quot;nd&quot;&gt;@test&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;sample&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1000&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;measure&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;qubit&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;()))&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;As &lt;a href=&quot;building-a-qpu-simulator-in-clojure-part-1&quot;&gt;before&lt;/a&gt;, we can make that pass trivially, of course, defining a dummy qubit and just returning false from &lt;code class=&quot;highlighter-rouge&quot;&gt;measure&lt;/code&gt; every time.&lt;/p&gt;
+
+&lt;div class=&quot;language-julia highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;qubit&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;nothing&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;measure&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;qubit&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;false&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Now, given Julia’s support for matrices, let’s jump straight to theory. A qubit can be represented by a &lt;strong&gt;pair&lt;/strong&gt; of (complex) numbers, a &lt;script type=&quot;math/tex&quot;&gt;\mathcal{H}_2&lt;/script&gt; space. In the case of a qubit initialised to the &lt;script type=&quot;math/tex&quot;&gt;\ket{0}&lt;/script&gt; state that is just &lt;code class=&quot;highlighter-rouge&quot;&gt;[1 0]&lt;/code&gt;. We saw in the &lt;a href=&quot;building-a-qpu-simulator-in-julia-part-1&quot;&gt;last post&lt;/a&gt; how easy that is in Julia&lt;label for=&quot;float32&quot; class=&quot;margin-toggle sidenote-number&quot;&gt;&lt;/label&gt;&lt;input type=&quot;checkbox&quot; id=&quot;float32&quot; class=&quot;margin-toggle&quot; /&gt;&lt;span class=&quot;sidenote&quot;&gt;Julia uses 64-bit floats by default. We don’t need that level of precision and 32-bit floats save memory, a simple but important consideration for QPU simulators. &lt;/span&gt;:&lt;/p&gt;
+
+&lt;div class=&quot;language-julia highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;qubit&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt; &lt;span class=&quot;kt&quot;&gt;Float32&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;]&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;The measurement can be represented by a matrix operator using the quadratic form &lt;script type=&quot;math/tex&quot;&gt;p(\ket{0})=\braket{v}{0}\braket{0}{v}=v^{T} M_0 v&lt;/script&gt; where &lt;script type=&quot;math/tex&quot;&gt;p(\ket{0})&lt;/script&gt; is the probability that a qubit is measured as &lt;code class=&quot;highlighter-rouge&quot;&gt;false&lt;/code&gt; and&lt;/p&gt;
+
+&lt;script type=&quot;math/tex; mode=display&quot;&gt;% &lt;![CDATA[
+M_0 = \ketbra{0}{0} = \left(
+  \begin{array}{c} 
+  1 \\ 
+  0 \\
+  \end{array} 
+  \right)
+  \left(
+  \begin{array}{c} 
+  1 &amp; 0
+  \end{array} 
+  \right)
+  =
+  \left(
+  \begin{array}{c} 
+  1 &amp; 0 \\ 
+  0 &amp; 0 \\
+  \end{array} 
+  \right) %]]&gt;&lt;/script&gt;
+
+&lt;p&gt;To make this calculation we can take advantage of Julia’s &lt;a href=&quot;https://docs.julialang.org/en/v1/stdlib/LinearAlgebra/#Base.adjoint&quot;&gt;adjoint&lt;/a&gt; operator, &lt;code class=&quot;highlighter-rouge&quot;&gt;'&lt;/code&gt;. Also this is where the random aspect of the qubit comes into play and the &lt;code class=&quot;highlighter-rouge&quot;&gt;rand()&lt;/code&gt; function is used to determine if the measurement is indeed &lt;code class=&quot;highlighter-rouge&quot;&gt;false&lt;/code&gt; based on the probability of it being so.&lt;/p&gt;
+
+&lt;div class=&quot;language-julia highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;M₀&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;]&lt;/span&gt;&lt;span class=&quot;err&quot;&gt;'&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;]&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;measure&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;qubit&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;rand&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;abs&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;q&lt;/span&gt;&lt;span class=&quot;err&quot;&gt;'&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;M₀&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;q&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;div class=&quot;language-console highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;gp&quot;&gt;julia&amp;gt;&lt;/span&gt; @test sample&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;1_000_000, &lt;span class=&quot;o&quot;&gt;()&lt;/span&gt; -&amp;gt; measure&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;qubit&lt;span class=&quot;o&quot;&gt;()))&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; 0
+&lt;span class=&quot;go&quot;&gt;Test Passed
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;h2 id=&quot;the-hadamard-gate&quot;&gt;The Hadamard Gate&lt;/h2&gt;
+
+&lt;p&gt;At the moment the qubit is always initialised to &lt;script type=&quot;math/tex&quot;&gt;\ket{0}&lt;/script&gt; so measurement will always return &lt;code class=&quot;highlighter-rouge&quot;&gt;false&lt;/code&gt; with 100% probability. To make the measurement more meaningful we want to be able to move the state of the qubit into a 50/50 superposition (half way around the Bloch sphere) so that measurement will return &lt;code class=&quot;highlighter-rouge&quot;&gt;true&lt;/code&gt; or &lt;code class=&quot;highlighter-rouge&quot;&gt;false&lt;/code&gt; with equal probability, a fair coin toss. We can do that using the Hadamard operator. The Hadamard operator is defined as &lt;script type=&quot;math/tex&quot;&gt;% &lt;![CDATA[
+H = \frac{1}{\sqrt{2}} \left(
+  \begin{array}{c} 
+  1 &amp; 1 \\
+  1 &amp; -1 \\
+  \end{array} 
+  \right) %]]&gt;&lt;/script&gt; and is similarly easy to implement with Julia’s matrix syntax:&lt;/p&gt;
+
+&lt;div class=&quot;language-console highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;gp&quot;&gt;julia&amp;gt;&lt;/span&gt; H &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; Float32&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;1/sqrt&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;2&lt;span class=&quot;o&quot;&gt;))&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;1 1&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt; 1 &lt;span class=&quot;nt&quot;&gt;-1&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;]&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;2×2 Array{Float32,2}:
+ 0.707107   0.707107
+ 0.707107  -0.707107
+
+&lt;/span&gt;&lt;span class=&quot;gp&quot;&gt;julia&amp;gt;&lt;/span&gt; hadamard &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;qubit&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt; -&amp;gt; H &lt;span class=&quot;k&quot;&gt;*&lt;/span&gt; qubit
+&lt;span class=&quot;gp&quot;&gt;julia&amp;gt;&lt;/span&gt; hadamard&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;qubit&lt;span class=&quot;o&quot;&gt;())&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;2-element Array{Float32,1}:
+ 0.70710677
+ 0.70710677
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Or even better using the piping operator:&lt;/p&gt;
+
+&lt;div class=&quot;language-console highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;gp&quot;&gt;julia&amp;gt;&lt;/span&gt; qubit&lt;span class=&quot;o&quot;&gt;()&lt;/span&gt; |&amp;gt; hadamard
+&lt;span class=&quot;go&quot;&gt;2-element Array{Float32,1}:
+ 0.70710677
+ 0.70710677
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Then we can measure our qubit and it gives us one random bit each time, as can be seen by measuring multiple qubits prepared in the same way.&lt;/p&gt;
+
+&lt;div class=&quot;language-console highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;gp&quot;&gt;julia&amp;gt;&lt;/span&gt; repeatedly&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;3, &lt;span class=&quot;o&quot;&gt;()&lt;/span&gt; -&amp;gt; qubit&lt;span class=&quot;o&quot;&gt;()&lt;/span&gt; |&amp;gt; hadamard |&amp;gt; measure&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;10-element Array{Bool,1}:
+ false
+  true
+ false
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;We could build our random number generator already, taking 3 independent measurements and interpreting it as binary. For example,&lt;/p&gt;
+
+&lt;div class=&quot;language-julia highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;coinToss&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;qubit&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;|&amp;gt;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;hadamard&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;|&amp;gt;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;measure&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;toInt&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;b&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;reduce&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;((&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;acc&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;v&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;acc&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;v&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;?&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;b&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;div class=&quot;language-console highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;gp&quot;&gt;julia&amp;gt;&lt;/span&gt; toInt&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;repeatedly&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;3, coinToss&lt;span class=&quot;o&quot;&gt;))&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;6
+&lt;/span&gt;&lt;span class=&quot;gp&quot;&gt;julia&amp;gt;&lt;/span&gt; toInt&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;repeatedly&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;3, coinToss&lt;span class=&quot;o&quot;&gt;))&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;3
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;This, however, is cheating because we can only deal with one qubit at a time and it doesn’t implement our original feature test. We’re back to the same point as we were with the Clojure implementation but in a better position because now we can take advantage of more of Julia’s built-in linear algebra support.&lt;/p&gt;
+
+&lt;h2 id=&quot;quantum-registers&quot;&gt;Quantum Registers&lt;/h2&gt;
+
+&lt;p&gt;So let’s make things even harder and represent qubit &lt;em&gt;registers&lt;/em&gt;. Registers are &lt;em&gt;systems&lt;/em&gt; of qubits in a combined state. We calculate this combined state with the &lt;a href=&quot;https://en.wikipedia.org/wiki/Kronecker_product&quot;&gt;Krondecker&lt;/a&gt; product, also implemented natively in Julia by the &lt;a href=&quot;https://docs.julialang.org/en/v1/stdlib/LinearAlgebra/index.html#Base.kron&quot;&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;kron&lt;/code&gt;&lt;/a&gt; function. Let’s try a 2 qubit register:&lt;/p&gt;
+
+&lt;div class=&quot;language-julia highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;qubits&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;kron&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;qubit&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(),&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;qubit&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;())&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Testing in the console, it just works…&lt;/p&gt;
+
+&lt;div class=&quot;language-console highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;gp&quot;&gt;julia&amp;gt;&lt;/span&gt; qubits&lt;span class=&quot;o&quot;&gt;()&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;4-element Array{Float32,1}:
+ 1.0
+ 0.0
+ 0.0
+ 0.0
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;We can generate any size register we please, with the only constraint being available memory:&lt;/p&gt;
+
+&lt;div class=&quot;language-julia highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;register&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;foldl&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;kron&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;fill&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;qubit&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(),&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;n&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;))&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;This function uses the standard &lt;code class=&quot;highlighter-rouge&quot;&gt;fold&lt;/code&gt; function to perform the &lt;code class=&quot;highlighter-rouge&quot;&gt;kron&lt;/code&gt; operation, from left to right, over an array of &lt;code class=&quot;highlighter-rouge&quot;&gt;n&lt;/code&gt; qubits.&lt;/p&gt;
+
+&lt;div class=&quot;language-console highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;gp&quot;&gt;julia&amp;gt;&lt;/span&gt; register&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;3&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;8-element Array{Float32,1}:
+ 1.0
+ 0.0
+ 0.0
+ 0.0
+ 0.0
+ 0.0
+ 0.0
+ 0.0
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;It works as expected. A 2 bit register needs an array of 4 complex numbers, a 3 bit one needs an 8 bit array, 4-bits require 16 and so on. The size of the array gets very big.&lt;/p&gt;
+
+&lt;p&gt;Now we can turn our attention to the quantum gates and combine them into a multiple qubit gate. Once again the Krondecker product is used and works in exactly the same way.&lt;/p&gt;
+
+&lt;div class=&quot;language-julia highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;hadamard&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;foldl&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;kron&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;fill&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;H&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;n&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;))&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+&lt;div class=&quot;language-console highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;gp&quot;&gt;julia&amp;gt;&lt;/span&gt; hadamard&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;3&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;8×8 Array{Float32,2}:
+ 0.353553   0.353553   0.353553   0.353553   0.353553   0.353553   0.353553   0.353553
+ 0.353553  -0.353553   0.353553  -0.353553   0.353553  -0.353553   0.353553  -0.353553
+ 0.353553   0.353553  -0.353553  -0.353553   0.353553   0.353553  -0.353553  -0.353553
+ 0.353553  -0.353553  -0.353553   0.353553   0.353553  -0.353553  -0.353553   0.353553
+ 0.353553   0.353553   0.353553   0.353553  -0.353553  -0.353553  -0.353553  -0.353553
+ 0.353553  -0.353553   0.353553  -0.353553  -0.353553   0.353553  -0.353553   0.353553
+ 0.353553   0.353553  -0.353553  -0.353553  -0.353553  -0.353553   0.353553   0.353553
+ 0.353553  -0.353553  -0.353553   0.353553  -0.353553   0.353553   0.353553  -0.353553
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;It’s clear how the size of these gates gets out of hand very quickly having a size of &lt;script type=&quot;math/tex&quot;&gt;2^n \times 2^n&lt;/script&gt;.&lt;/p&gt;
+
+&lt;p&gt;Using this gate we can apply the Hadamard operator to all the qubits at once.&lt;/p&gt;
+
+&lt;div class=&quot;language-console highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;gp&quot;&gt;julia&amp;gt;&lt;/span&gt; hadamard&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;3&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;*&lt;/span&gt; register&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;3&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;8-element Array{Float32,1}:
+ 0.35355335
+ 0.35355335
+ 0.35355335
+ 0.35355335
+ 0.35355335
+ 0.35355335
+ 0.35355335
+ 0.35355335
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;This is the combined state of a 3 bit quantum register with each bit in a 50/50 superposition. Not to be confused with entanglement because the bits are still independent… so far.&lt;/p&gt;
+
+&lt;p&gt;This is where things get a little more tricky.  To measure a single qubit we need to place the measurement operator over the qubit in the register, applying the identity operator for all other bits. This is called lifting&lt;label for=&quot;lifting&quot; class=&quot;margin-toggle sidenote-number&quot;&gt;&lt;/label&gt;&lt;input type=&quot;checkbox&quot; id=&quot;lifting&quot; class=&quot;margin-toggle&quot; /&gt;&lt;span class=&quot;sidenote&quot;&gt;At least it’s called lifting in &lt;a href=&quot;https://arxiv.org/abs/1608.03355&quot;&gt;this paper&lt;/a&gt; which I found helpful to understand this process. &lt;/span&gt;.&lt;/p&gt;
+
+&lt;p&gt;We’ll need the identity operator for a single qubit &lt;script type=&quot;math/tex&quot;&gt;% &lt;![CDATA[
+I = \left(
+  \begin{array}{c} 
+  1 &amp; 0 \\
+  0 &amp; 1 \\
+  \end{array} 
+  \right) %]]&gt;&lt;/script&gt;:&lt;/p&gt;
+
+&lt;div class=&quot;language-julia highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;eye&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt; &lt;span class=&quot;kt&quot;&gt;Matrix&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;Float32&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;}(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;I&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Now we must &lt;em&gt;lift&lt;/em&gt; the &lt;script type=&quot;math/tex&quot;&gt;M_0&lt;/script&gt; operator as &lt;script type=&quot;math/tex&quot;&gt;I^{k-1} \times M_0 \times I^{n-k-1}&lt;/script&gt;. In Julia this can be written like this:&lt;/p&gt;
+
+&lt;div class=&quot;language-julia highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;lift&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;k&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;op&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;foldl&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;kron&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;map&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;it&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;it&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;k&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;?&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;op&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;eye&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;collect&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)))&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;This function will combine a series of &lt;script type=&quot;math/tex&quot;&gt;I&lt;/script&gt; operators, the &lt;code class=&quot;highlighter-rouge&quot;&gt;op&lt;/code&gt; operator over the &lt;code class=&quot;highlighter-rouge&quot;&gt;k&lt;/code&gt;th bit and then more &lt;script type=&quot;math/tex&quot;&gt;I&lt;/script&gt; operators to the end of the register. The result is&lt;label for=&quot;sparse&quot; class=&quot;margin-toggle sidenote-number&quot;&gt;&lt;/label&gt;&lt;input type=&quot;checkbox&quot; id=&quot;sparse&quot; class=&quot;margin-toggle&quot; /&gt;&lt;span class=&quot;sidenote&quot;&gt;It can be seen here that the lifting matrix is mostly full of zeros. Hopefully we’ll be able to take advantage of Julia’s specialised matrix representations to optimise this. &lt;/span&gt;:&lt;/p&gt;
+
+&lt;div class=&quot;language-console highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;gp&quot;&gt;julia&amp;gt;&lt;/span&gt; lift&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;3, 2, M₀&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;8×8 Array{Float32,2}:
+ 1.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0
+ 0.0  1.0  0.0  0.0  0.0  0.0  0.0  0.0
+ 0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0
+ 0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0
+ 0.0  0.0  0.0  0.0  1.0  0.0  0.0  0.0
+ 0.0  0.0  0.0  0.0  0.0  1.0  0.0  0.0
+ 0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0
+ 0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Measurement of the kth bit is then:&lt;/p&gt;
+
+&lt;div class=&quot;language-julia highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;measure&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;k&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;qubits&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;rand&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;qubits&lt;/span&gt;&lt;span class=&quot;err&quot;&gt;'&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;lift&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;k&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;M₀&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;qubits&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;So we can measure the 2nd bit like this:&lt;/p&gt;
+
+&lt;div class=&quot;language-console highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;gp&quot;&gt;julia&amp;gt;&lt;/span&gt; qubits &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; hadamard&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;3&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;*&lt;/span&gt; register&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;3&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;c&quot;&gt;...
+&lt;/span&gt;&lt;span class=&quot;gp&quot;&gt;julia&amp;gt;&lt;/span&gt; measure&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;3, 2, qubits&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;true
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;One more important point. The measurement of each qubit is an operation which &lt;em&gt;collapses&lt;/em&gt; the state of the qubit, i.e. changes its value. The measurement function must &lt;em&gt;lift&lt;/em&gt; the &lt;script type=&quot;math/tex&quot;&gt;M_0&lt;/script&gt; or &lt;script type=&quot;math/tex&quot;&gt;M_1&lt;/script&gt; operation (depending on the result) over the measured qubit, apply it to the register and then renormalise it. More information about this can be found in &lt;a href=&quot;https://arxiv.org/abs/1608.03355&quot;&gt;this paper&lt;/a&gt;.&lt;/p&gt;
+
+&lt;div class=&quot;language-julia highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;M₁&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;]&lt;/span&gt;&lt;span class=&quot;err&quot;&gt;'&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;]&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;measure&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;k&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;qubits&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;begin&lt;/span&gt;
+       &lt;span class=&quot;n&quot;&gt;result&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;rand&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;qubits&lt;/span&gt;&lt;span class=&quot;err&quot;&gt;'&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;lift&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;k&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;M₀&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;qubits&lt;/span&gt;
+       &lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;result&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;normalize&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;lift&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;k&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;result&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;?&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;M₁&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;M₀&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;))&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;qubits&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;))&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;end&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;To measure all the bits at once we can do something like this:&lt;/p&gt;
+
+&lt;div class=&quot;language-julia highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;measureAll&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;qubits&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;begin&lt;/span&gt;
+         &lt;span class=&quot;n&quot;&gt;results&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;[];&lt;/span&gt; 
+         &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;k&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n&lt;/span&gt;
+           &lt;span class=&quot;n&quot;&gt;result&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;qubits&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;measure&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;k&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;qubits&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt;
+           &lt;span class=&quot;n&quot;&gt;push!&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;results&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;result&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt;
+         &lt;span class=&quot;k&quot;&gt;end&lt;/span&gt;
+         &lt;span class=&quot;n&quot;&gt;results&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;qubits&lt;/span&gt;
+       &lt;span class=&quot;k&quot;&gt;end&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;It’s a bit nasty but, save for a few indices, at last we can say we have completed the first feature test. So our final solution, after extracting some constants, is:&lt;/p&gt;
+
+&lt;div class=&quot;language-julia highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;k&quot;&gt;using&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;LinearAlgebra&lt;/span&gt;
+
+&lt;span class=&quot;n&quot;&gt;ZERO&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;kt&quot;&gt;Float32&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;]&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;ONE&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;kt&quot;&gt;Float32&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;]&lt;/span&gt;
+
+&lt;span class=&quot;n&quot;&gt;eye&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;kt&quot;&gt;Matrix&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;Float32&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;}(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;I&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;H&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;kt&quot;&gt;Float32&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;/&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;sqrt&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;))&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;;&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;]&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;M₀&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;ZERO&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;ZERO&lt;/span&gt;&lt;span class=&quot;err&quot;&gt;'&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;M₁&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;ONE&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;ONE&lt;/span&gt;&lt;span class=&quot;err&quot;&gt;'&lt;/span&gt;
+
+&lt;span class=&quot;n&quot;&gt;register&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;foldl&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;kron&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;fill&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ZERO&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;n&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;))&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;hadamard&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;foldl&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;kron&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;fill&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;H&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;n&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;))&lt;/span&gt;
+
+&lt;span class=&quot;n&quot;&gt;lift&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;k&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;op&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;foldl&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;kron&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;map&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;it&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;it&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;k&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;?&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;op&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;eye&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;collect&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)))&lt;/span&gt;
+
+&lt;span class=&quot;n&quot;&gt;measure&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;k&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;qubits&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;begin&lt;/span&gt;
+         &lt;span class=&quot;n&quot;&gt;result&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;rand&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;qubits&lt;/span&gt;&lt;span class=&quot;err&quot;&gt;'&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;lift&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;k&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;M₀&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;qubits&lt;/span&gt;
+         &lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;result&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;normalize&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;lift&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;k&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;result&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;?&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;M₁&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;M₀&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;))&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;qubits&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;))&lt;/span&gt;
+       &lt;span class=&quot;k&quot;&gt;end&lt;/span&gt;
+
+&lt;span class=&quot;n&quot;&gt;measureAll&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;qubits&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;begin&lt;/span&gt;
+         &lt;span class=&quot;n&quot;&gt;results&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;[];&lt;/span&gt;
+         &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;k&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n&lt;/span&gt;
+           &lt;span class=&quot;n&quot;&gt;result&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;qubits&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;measure&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;k&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;qubits&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt;
+           &lt;span class=&quot;n&quot;&gt;push!&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;results&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;result&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt;
+         &lt;span class=&quot;k&quot;&gt;end&lt;/span&gt;
+         &lt;span class=&quot;n&quot;&gt;results&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;qubits&lt;/span&gt;
+       &lt;span class=&quot;k&quot;&gt;end&lt;/span&gt;
+
+&lt;span class=&quot;n&quot;&gt;toInt&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;b&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;reduce&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;((&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;acc&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;v&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;acc&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;v&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;?&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;),&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;b&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;init&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt;
+
+&lt;span class=&quot;n&quot;&gt;qubits&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;hadamard&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;3&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;register&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;3&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;print&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;toInt&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;measureAll&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;3&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;qubits&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;]))&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Running it to give us a random number from 0 to 7 on the console.&lt;/p&gt;
+
+&lt;p&gt;Before we leave it, what’s the performance of this thing in its current form? Let’s see:&lt;/p&gt;
+
+&lt;div class=&quot;language-julia highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;n&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;11&lt;/span&gt;
+&lt;span class=&quot;nd&quot;&gt;@time&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;print&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;toInt&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;measureAll&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;hadamard&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;register&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;n&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;))[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;x&quot;&gt;]))&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;end&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+&lt;div class=&quot;language-console highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;go&quot;&gt;1  0.834134 seconds (1.63 M allocations: 90.474 MiB, 2.38% gc time)
+0  0.063235 seconds (15.49 k allocations: 813.162 KiB)
+7  0.004201 seconds (9.11 k allocations: 281.986 KiB)
+11  0.002534 seconds (27.13 k allocations: 623.813 KiB)
+30  0.011686 seconds (122.15 k allocations: 2.509 MiB)
+7  0.023647 seconds (634.68 k allocations: 12.326 MiB)
+1  0.086709 seconds (3.05 M allocations: 58.193 MiB, 5.11% gc time)
+185  0.362644 seconds (14.04 M allocations: 265.855 MiB, 1.72% gc time)
+237  1.746489 seconds (63.02 M allocations: 1.163 GiB, 6.29% gc time)
+504  7.655970 seconds (279.03 M allocations: 5.145 GiB, 11.96% gc time)
+490 31.689085 seconds (1.29 G allocations: 23.612 GiB, 4.77% gc time)
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;At just 11 bits it’s taking up huge parts of my machine and far exceeding available main memory. Now we have the machinery written in Julia we can try a number of things to improve performance:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;We’re using dense matrices everywhere. We can improve that by using sparse matrices where appropriate. The lifting matrix., especially, is open for conversion to a sparse matrix representation.&lt;/li&gt;
+  &lt;li&gt;Since the vectors can become quite large it makes sense to do the multiplications in-place, breaking the immutability of the functional paradigm but improving the performance and memory usage which will be very important for larger registers. May be necessary to write our own algorithm to do that using sparse matrices and dense arrays.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;Also there are a number of other improvements to consider:&lt;/p&gt;
+&lt;ul&gt;
+  &lt;li&gt;We pass around the number of bits when it could be determined implicitly from the size of the arrays.&lt;/li&gt;
+  &lt;li&gt;There is no entanglement yet in our system, for that we need to define a Conditional NOT operator and for that a more sophisticated &lt;code class=&quot;highlighter-rouge&quot;&gt;lift&lt;/code&gt; function.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;We’ll cover all that in another post.&lt;/p&gt;
+
+</description>
+        <pubDate>Tue, 07 May 2019 20:42:00 +0200</pubDate>
+        <link>/articles/building-a-qpu-simulator-in-julia-part-2</link>
+        <guid isPermaLink="true">/articles/building-a-qpu-simulator-in-julia-part-2</guid>
+        
+        <category>quantum computing</category>
+        
+        <category>tdd</category>
+        
+        <category>julia</category>
+        
+        
+      </item>
+    
+      <item>
+        <title>Building a QPU simulator in Julia - Part 1</title>
+        <description>&lt;p&gt;Just for a kicks, I started rewriting &lt;a href=&quot;https://github.com/johnhearn/quko&quot;&gt;Quko&lt;/a&gt;, my simple quantum computing simulator, &lt;a href=&quot;building-a-qpu-simulator-in-clojure-part-1&quot;&gt;in clojure&lt;/a&gt;. I thought that having powerful linear algebra libraries like &lt;a href=&quot;https://neanderthal.uncomplicate.org/&quot;&gt;Neanderthal&lt;/a&gt; would help simplify the task but it didn’t feel right. I decided to put it on hold until I got some inspiration.&lt;/p&gt;
+
+&lt;p&gt;&lt;label for=&quot;ssn-talk&quot; class=&quot;margin-toggle&quot;&gt;⊕&lt;/label&gt;&lt;input type=&quot;checkbox&quot; id=&quot;ssn-talk&quot; class=&quot;margin-toggle&quot; /&gt;&lt;span class=&quot;marginnote&quot;&gt;&lt;img class=&quot;fullwidth&quot; src=&quot;/assets/images/pointcare-snns.png&quot; /&gt;&lt;br /&gt;The talk included Julia code for generating this Pointcaré section of the chaotic interaction between 3 spiking neural networks (SNNs) which I, ironically, converted to Kotlin.&lt;/span&gt;&lt;/p&gt;
+
+&lt;p&gt;So, I started looking again at &lt;a href=&quot;encounter-with-complexity&quot;&gt;&lt;em&gt;complexity&lt;/em&gt; theory&lt;/a&gt;. I was lead via &lt;a href=&quot;https://en.wikipedia.org/wiki/Logistic_map&quot;&gt;logistic maps&lt;/a&gt;, and &lt;a href=&quot;https://en.wikipedia.org/wiki/Lotka%E2%80%93Volterra_equations&quot;&gt;other&lt;/a&gt; &lt;a href=&quot;https://en.wikipedia.org/wiki/Rayleigh%E2%80%93B%C3%A9nard_convection&quot;&gt;dynamic&lt;/a&gt; &lt;a href=&quot;https://en.wikipedia.org/wiki/Galaxy_filament&quot;&gt;systems&lt;/a&gt; to a library called &lt;a href=&quot;https://juliadynamics.github.io/JuliaDynamics/&quot;&gt;DynamicSystems.jl&lt;/a&gt; written in a language called &lt;a href=&quot;https://julialang.org/&quot;&gt;Julia&lt;/a&gt;. I remembered having seen Julia two years ago from another &lt;a href=&quot;https://www.youtube.com/watch?v=cLLQcshWEbE&quot;&gt;talk&lt;/a&gt; on simulating spiking neural networks using Julia.&lt;/p&gt;
+
+&lt;p&gt;The things that were bothering me in Kotlin and Clojure when building the QPU simulator were complex numbers and linear algebra, specifically the Krondecker product, and it turns out that Julia supports both natively! So it was worth giving it a try.&lt;/p&gt;
+
+&lt;p&gt;Installing Julia on a Mac is as simple as you might expect&lt;label for=&quot;jupyter&quot; class=&quot;margin-toggle sidenote-number&quot;&gt;&lt;/label&gt;&lt;input type=&quot;checkbox&quot; id=&quot;jupyter&quot; class=&quot;margin-toggle&quot; /&gt;&lt;span class=&quot;sidenote&quot;&gt;You can use it from &lt;a href=&quot;https://jupyter.org/&quot;&gt;Jupyter&lt;/a&gt;, if you prefer. I wrote down how to do that in a &lt;a href=&quot;using-julia-in-jupyter&quot;&gt;separate note&lt;/a&gt;. The community overlap with Python is understandable. &lt;/span&gt;&lt;/p&gt;
+
+&lt;div class=&quot;language-console highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;gp&quot;&gt;&amp;gt;&lt;/span&gt; brew &lt;span class=&quot;nb&quot;&gt;install &lt;/span&gt;julia
+&lt;span class=&quot;c&quot;&gt;...
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Like Clojure, Julia has a nice REPL for developing and testing ideas quickly. Built-in support for vectors means that defining a qubit is easy&lt;label for=&quot;float32&quot; class=&quot;margin-toggle sidenote-number&quot;&gt;&lt;/label&gt;&lt;input type=&quot;checkbox&quot; id=&quot;float32&quot; class=&quot;margin-toggle&quot; /&gt;&lt;span class=&quot;sidenote&quot;&gt;Julia uses 64-bit floats by default. We don’t need that level of precision and 32-bit floats save memory, a simple but important consideration for QPU simulators. &lt;/span&gt;:&lt;/p&gt;
+
+&lt;div class=&quot;language-console highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;gp&quot;&gt;julia&amp;gt;&lt;/span&gt; qubit &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; Float32&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;1&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;1, 0]
+&lt;span class=&quot;go&quot;&gt;2-element Array{Float32,1}:
+ 1.0
+ 0.0
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Julia has dynamic typing so the variable type doesn’t need to be set explicitly. The Hadamard operator&lt;label for=&quot;hadamard&quot; class=&quot;margin-toggle sidenote-number&quot;&gt;&lt;/label&gt;&lt;input type=&quot;checkbox&quot; id=&quot;hadamard&quot; class=&quot;margin-toggle&quot; /&gt;&lt;span class=&quot;sidenote&quot;&gt;Defined as &lt;script type=&quot;math/tex&quot;&gt;% &lt;![CDATA[
+H = \frac{1}{\sqrt{2}} \left(
+  \begin{array}{c} 
+  1 &amp; 1 \\ 
+  1 &amp; -1 \\ 
+  \end{array} 
+  \right) %]]&gt;&lt;/script&gt; &lt;/span&gt; is similarly easy to define with Julia’s matrix syntax:&lt;/p&gt;
+
+&lt;div class=&quot;language-console highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;gp&quot;&gt;julia&amp;gt;&lt;/span&gt; H &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; Float32&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;1/sqrt&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;2&lt;span class=&quot;o&quot;&gt;))&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;1 1&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt; 1 &lt;span class=&quot;nt&quot;&gt;-1&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;]&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;2×2 Array{Float32,2}:
+ 0.707107   0.707107
+ 0.707107  -0.707107
+
+&lt;/span&gt;&lt;span class=&quot;gp&quot;&gt;julia&amp;gt;&lt;/span&gt; H &lt;span class=&quot;k&quot;&gt;*&lt;/span&gt; qubit
+&lt;span class=&quot;go&quot;&gt;2-element Array{Float32,1}:
+ 0.70710677
+ 0.70710677
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Taking it a step further we can use complex numbers natively. For example, we are able to define the &lt;a href=&quot;https://en.wikipedia.org/wiki/Quantum_logic_gate#Square_root_of_NOT_gate_(%E2%88%9ANOT)&quot;&gt;&lt;script type=&quot;math/tex&quot;&gt;\sqrt{NOT}&lt;/script&gt; gate&lt;/a&gt;&lt;label for=&quot;hadamard&quot; class=&quot;margin-toggle sidenote-number&quot;&gt;&lt;/label&gt;&lt;input type=&quot;checkbox&quot; id=&quot;hadamard&quot; class=&quot;margin-toggle&quot; /&gt;&lt;span class=&quot;sidenote&quot;&gt;Defined as &lt;script type=&quot;math/tex&quot;&gt;% &lt;![CDATA[
+\sqrt{NOT} = \frac{1}{2} \left(
+  \begin{array}{c} 
+  1+i &amp; 1-i \\ 
+  1-i &amp; 1+i \\ 
+  \end{array} 
+  \right) %]]&gt;&lt;/script&gt; &lt;/span&gt; almost as easily:&lt;/p&gt;
+
+&lt;div class=&quot;language-console highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;gp&quot;&gt;julia&amp;gt;&lt;/span&gt; halfX &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; Float32&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;0.5&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;1+im 1-im&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt; 1-im 1+im]
+&lt;span class=&quot;go&quot;&gt;2×2 Array{Complex{Float32},2}:
+ 0.5+0.5im  0.5-0.5im
+ 0.5-0.5im  0.5+0.5im
+
+&lt;/span&gt;&lt;span class=&quot;gp&quot;&gt;julia&amp;gt;&lt;/span&gt; halfX &lt;span class=&quot;k&quot;&gt;*&lt;/span&gt; qubit
+&lt;span class=&quot;go&quot;&gt;2-element Array{Complex{Float32},1}:
+ 0.5f0 + 0.5f0im
+ 0.5f0 - 0.5f0im
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;We can test that it’s unitary using the conjugation operator, &lt;code class=&quot;highlighter-rouge&quot;&gt;'&lt;/code&gt;, and the &lt;code class=&quot;highlighter-rouge&quot;&gt;@test&lt;/code&gt; macro:&lt;/p&gt;
+
+&lt;div class=&quot;language-console highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;gp&quot;&gt;julia&amp;gt;&lt;/span&gt; using Test
+&lt;span class=&quot;gp&quot;&gt;julia&amp;gt;&lt;/span&gt; @test halfX&lt;span class=&quot;s1&quot;&gt;'*halfX ≈ [1 0; 0 1]
+&lt;/span&gt;&lt;span class=&quot;go&quot;&gt;Test Passed
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;It’s normal in Julia to use Unicode characters directly. This is strange at first but makes formulas very succinct. In the above test we used the &lt;code class=&quot;highlighter-rouge&quot;&gt;≈&lt;/code&gt;  character&lt;label for=&quot;approx&quot; class=&quot;margin-toggle sidenote-number&quot;&gt;&lt;/label&gt;&lt;input type=&quot;checkbox&quot; id=&quot;approx&quot; class=&quot;margin-toggle&quot; /&gt;&lt;span class=&quot;sidenote&quot;&gt;In the REPL, type &lt;code class=&quot;highlighter-rouge&quot;&gt;\approx&lt;/code&gt; and then press &lt;code class=&quot;highlighter-rouge&quot;&gt;Tab&lt;/code&gt;. &lt;/span&gt; to perform a machine-precision equality test.&lt;/p&gt;
+
+&lt;p&gt;Being a functional language, it’s straightforward to turn our operators into functions. X is the quantum NOT operator:&lt;/p&gt;
+
+&lt;div class=&quot;language-console highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;gp&quot;&gt;julia&amp;gt;&lt;/span&gt; X &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;qubit&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt; -&amp;gt; Float32&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;1&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;0 1&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt; 1 0] &lt;span class=&quot;k&quot;&gt;*&lt;/span&gt; qubit
+&lt;span class=&quot;gp&quot;&gt;#&lt;/span&gt;3 &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;generic &lt;span class=&quot;k&quot;&gt;function &lt;/span&gt;with 1 method&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;
+&lt;/span&gt;&lt;span class=&quot;gp&quot;&gt;julia&amp;gt;&lt;/span&gt; @test X&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;X&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;qubit&lt;span class=&quot;o&quot;&gt;))&lt;/span&gt; ≈ qubit
+&lt;span class=&quot;go&quot;&gt;Test Passed
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;This language really is a close to perfect for my project! &lt;a href=&quot;https://cognitive-edge.com/blog/serendipity/&quot;&gt;Serendipity&lt;/a&gt;&lt;label for=&quot;serendipity&quot; class=&quot;margin-toggle sidenote-number&quot;&gt;&lt;/label&gt;&lt;input type=&quot;checkbox&quot; id=&quot;serendipity&quot; class=&quot;margin-toggle&quot; /&gt;&lt;span class=&quot;sidenote&quot;&gt;Techniques for &lt;a href=&quot;https://cognitive-edge.com/blog/exaptation-managed-serendipity-part-i/&quot;&gt;encouraging serendipity&lt;/a&gt; are an important part of 
+ the &lt;a href=&quot;https://cognitive-edge.com/videos/cynefin-framework-introduction/&quot;&gt;Cynefin&lt;/a&gt; framework, which I also happen to be studying at the moment. De Bono’s concept of &lt;em&gt;Readiness&lt;/em&gt; in action again. &lt;/span&gt; is a wonderful thing.&lt;/p&gt;
+
+</description>
+        <pubDate>Tue, 07 May 2019 20:42:00 +0200</pubDate>
+        <link>/articles/building-a-qpu-simulator-in-julia-part-1</link>
+        <guid isPermaLink="true">/articles/building-a-qpu-simulator-in-julia-part-1</guid>
+        
+        <category>quantum computing</category>
+        
+        <category>tdd</category>
+        
+        <category>julia</category>
+        
+        
+      </item>
+    
   </channel>
 </rss>
